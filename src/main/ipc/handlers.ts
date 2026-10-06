@@ -46,7 +46,7 @@ const assertId = (v: unknown, what: string): void => {
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
 
-export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void> } {
+export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void>; dispose(): void } {
   const { ipc, config, client, engine, state, send, sessionsDir } = deps
   const logger = deps.logger ?? noopLogger
   let user: SelfUser | null = null
@@ -96,6 +96,8 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
 
   // --- auth ---------------------------------------------------------------------------------
   handle('auth.setToken', async (token: string) => {
+    loginGen++
+    cancelRetry()
     setConnection('connecting')
     let me: SelfUser
     try {
@@ -129,6 +131,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
 
   let retryTimer: ReturnType<typeof setTimeout> | null = null
   let attempt = 0
+  let loginGen = 0 // bumped by every manual setToken: stale auto-login results are ignored
   function cancelRetry(): void {
     if (retryTimer) clearTimeout(retryTimer)
     retryTimer = null
@@ -140,12 +143,16 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     retryTimer = null
     const token = config.getToken()
     if (!token) return
+    const gen = loginGen
     setConnection('connecting')
     try {
-      user = await client.login(token)
+      const me = await client.login(token)
+      if (gen !== loginGen) return // a manual setToken started meanwhile
+      user = me
       attempt = 0
       setConnection('connected')
     } catch (e) {
+      if (gen !== loginGen) return
       user = null
       if (e instanceof LoginError && e.kind === 'network') {
         setConnection('disconnected', e.message)
@@ -201,5 +208,5 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     await deps.openPath(deps.dataDir)
   })
 
-  return { autoLogin }
+  return { autoLogin, dispose: cancelRetry }
 }

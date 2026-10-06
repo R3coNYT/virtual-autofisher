@@ -33,7 +33,9 @@ type RawCommand = {
 type RestRoute = { get(): Promise<unknown> }
 type RestApi = Record<string, Record<string, Record<string, RestRoute>>>
 
-export type SelfbotClientOpts = { captureDir?: string; logger?: Logger }
+export type SelfbotClientOpts = { captureDir?: string; logger?: Logger; createClient?: () => Client }
+
+const defaultClient = (): Client => new Client({ checkUpdate: false } as ConstructorParameters<typeof Client>[0])
 
 /**
  * The only module touching discord.js-selfbot-v13.
@@ -89,9 +91,8 @@ export class SelfbotClient implements DiscordClient {
   }
 
   async login(token: string): Promise<SelfUser> {
-    await this.logout()
-    const client = new Client({ checkUpdate: false } as ConstructorParameters<typeof Client>[0])
-    this.client = client
+    // Build and log in the NEW client first: a failure must leave the current one untouched.
+    const client = this.opts.createClient ? this.opts.createClient() : defaultClient()
     this.attach(client)
 
     try {
@@ -111,16 +112,22 @@ export class SelfbotClient implements DiscordClient {
         })
       })
     } catch (e) {
-      await this.logout()
+      this.destroy(client)
       throw e instanceof LoginError ? e : new LoginError('network')
     }
 
     const u = client.user
     if (!u) {
-      await this.logout()
+      this.destroy(client)
       throw new LoginError('network')
     }
+    const old = this.client
+    this.client = client
     this.selfId = u.id
+    this.disconnected = false
+    this.vfByGuild.clear()
+    this.commandsByGuild.clear()
+    if (old) this.destroy(old)
     return { id: u.id, username: u.username, avatarUrl: u.displayAvatarURL() }
   }
 
@@ -131,24 +138,27 @@ export class SelfbotClient implements DiscordClient {
     this.disconnected = false
     this.vfByGuild.clear()
     this.commandsByGuild.clear()
-    if (c) {
-      try {
-        c.removeAllListeners()
-        c.destroy()
-      } catch (e) {
-        this.opts.logger?.warn('destroy failed', e)
-      }
+    if (c) this.destroy(c)
+  }
+
+  private destroy(c: Client): void {
+    try {
+      c.removeAllListeners()
+      c.destroy()
+    } catch (e) {
+      this.opts.logger?.warn('destroy failed', e)
     }
   }
 
   private attach(client: Client): void {
+    const current = (): boolean => this.client === client // events of a not-yet-adopted client are ignored
     const markDisconnected = (): void => {
-      if (this.disconnected) return
+      if (!current() || this.disconnected) return
       this.disconnected = true
       this.emit('disconnected')
     }
     const markReconnected = (): void => {
-      if (!this.disconnected) return
+      if (!current() || !this.disconnected) return
       this.disconnected = false
       this.emit('reconnected')
     }
@@ -156,9 +166,9 @@ export class SelfbotClient implements DiscordClient {
     client.on('shardReconnecting', markDisconnected)
     client.on('shardResume', markReconnected)
     client.on('shardReady', markReconnected)
-    client.on('rateLimit', (d) => this.emit('rateLimited', d.timeout))
-    client.on('messageCreate', (m) => this.handleMessage(m as unknown as LibMessageLike, false))
-    client.on('messageUpdate', (_old, m) => this.handleMessage(m as unknown as LibMessageLike, true))
+    client.on('rateLimit', (d) => void (current() && this.emit('rateLimited', d.timeout)))
+    client.on('messageCreate', (m) => void (current() && this.handleMessage(m as unknown as LibMessageLike, false)))
+    client.on('messageUpdate', (_old, m) => void (current() && this.handleMessage(m as unknown as LibMessageLike, true)))
     client.on('error', (e) => this.opts.logger?.error('client error', e))
   }
 

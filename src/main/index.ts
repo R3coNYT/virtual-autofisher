@@ -50,7 +50,7 @@ function boot(): void {
   const send = (channel: string, payload: unknown): void => {
     if (!win.isDestroyed()) win.webContents.send(channel, payload)
   }
-  const { autoLogin } = registerHandlers({
+  const { autoLogin, dispose } = registerHandlers({
     ipc: ipcMain,
     config,
     client,
@@ -69,6 +69,7 @@ function boot(): void {
 
   // writes the session summary (synchronously) before the process goes away
   app.on('before-quit', () => {
+    dispose()
     try {
       engine.stop()
     } catch (e) {

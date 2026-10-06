@@ -211,6 +211,52 @@ describe('registerHandlers', () => {
     expect(sent.filter((s) => (s.payload as { status: string }).status === 'connecting')).toHaveLength(3)
   })
 
+  it('a manual setToken cancels the pending auto-login retry and wins over an in-flight one', async () => {
+    const { api, config, client, call, sent } = setup()
+    config.setToken(TOKEN)
+    client.failLogin = true
+    client.failLoginKind = 'network'
+    await api.autoLogin() // schedules a retry
+    client.failLogin = false
+    await call('auth.setToken', TOKEN)
+    const connecting = () => sent.filter((s) => (s.payload as { status: string }).status === 'connecting').length
+    const n = connecting()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(connecting()).toBe(n) // retry was cancelled
+
+    // in-flight auto-login superseded by setToken
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const realLogin = client.login.bind(client)
+    let first = true
+    client.login = async (t: string) => {
+      if (first) {
+        first = false
+        await gate
+        throw new Error('late failure')
+      }
+      return realLogin(t)
+    }
+    const auto = api.autoLogin()
+    await call('auth.setToken', TOKEN)
+    release()
+    await auto
+    expect(config.getToken()).toBe(TOKEN) // stale failure did not clear the token
+    expect(sent.at(-1)?.payload).toEqual({ status: 'connected' })
+  })
+
+  it('dispose cancels the retry timer', async () => {
+    const { api, config, client, sent } = setup()
+    config.setToken(TOKEN)
+    client.failLogin = true
+    client.failLoginKind = 'network'
+    await api.autoLogin()
+    const n = sent.length
+    api.dispose()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(sent.length).toBe(n)
+  })
+
   it('target.set validates ids; config.update cannot set the target', async () => {
     const { call, config } = setup()
     await expect(call('target.set', 'g1', '20001')).rejects.toThrow('invalide')
