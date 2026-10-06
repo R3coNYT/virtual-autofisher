@@ -1,0 +1,23 @@
+appId: com.r3con.virtualautofisher
+productName: Virtual AutoFisher
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  # tray / window icons, resolved from process.resourcesPath when packaged (src/main/tray.ts)
+  - from: resources
+    to: .
+    filter:
+      - "*.png"
+win:
+  target:
+    - target: nsis
+      arch: x64
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false

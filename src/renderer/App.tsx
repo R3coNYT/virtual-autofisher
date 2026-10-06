@@ -1,13 +1,13 @@
 import { Background } from './components/Background'
-import { Placeholder } from './components/Placeholder'
+import { CaptchaPanel } from './components/CaptchaPanel'
 import { Splash } from './components/Splash'
 import Dashboard from './screens/Dashboard'
 import Onboarding from './screens/Onboarding'
 import ServerPicker from './screens/ServerPicker'
+import Settings from './screens/Settings'
 import { useApiEvents, useStore } from './store'
 
-export default function App(): JSX.Element {
-  useApiEvents()
+function Screen(): JSX.Element {
   const screen = useStore((s) => s.screen)
   const message = useStore((s) => s.connectionMessage)
 
@@ -19,7 +19,7 @@ export default function App(): JSX.Element {
     case 'dashboard':
       return <Dashboard />
     case 'settings':
-      return <Placeholder title="Settings" />
+      return <Settings />
     default:
       return (
         <Background>
@@ -27,4 +27,14 @@ export default function App(): JSX.Element {
         </Background>
       )
   }
+}
+
+export default function App(): JSX.Element {
+  useApiEvents()
+  return (
+    <>
+      <Screen />
+      <CaptchaPanel />
+    </>
+  )
 }

@@ -122,7 +122,7 @@ export type Config = {
   breaks: { enabled: boolean; workMin: number; workJitterMin: number; restMin: number; restJitterMin: number }
   sessionLimitH: number
   notifications: { captcha: boolean; sound: boolean; levelUp: boolean; rareFish: boolean }
-  ui: { compactLog: boolean }
+  ui: { compactLog: boolean; closeToTray: boolean }
   capture: boolean
 }
 
@@ -139,6 +139,6 @@ export const DEFAULT_CONFIG: Config = {
   breaks: { enabled: false, workMin: 45, workJitterMin: 10, restMin: 5, restJitterMin: 2 },
   sessionLimitH: 0,
   notifications: { captcha: true, sound: true, levelUp: true, rareFish: true },
-  ui: { compactLog: false },
+  ui: { compactLog: false, closeToTray: true },
   capture: false
 }
