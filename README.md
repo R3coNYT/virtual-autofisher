@@ -1,117 +1,132 @@
 # Virtual AutoFisher
 
-Application de bureau Windows (Electron + React) qui automatise le bot Discord **Virtual Fisher** avec votre propre compte : pêche en boucle, vente, buffs, appât, `/daily`, suivi des quêtes, avec un tableau de bord en direct (solde, niveau, prises, boosts, poissons rares, journal).
+A Windows desktop app (Electron + React) that automates the **Virtual Fisher** Discord bot with your own account: continuous fishing, selling, fish and treasure buffs, personal boosters, bait, `/daily` and quest tracking, with a live dashboard (balance, fish value, level, catches, boosts, rare fish, log).
 
-## Avertissements
+## Warnings
 
-- **Utiliser le token de votre compte (self-bot) est contraire aux conditions d'utilisation de Discord.** Votre compte s'expose à une suspension ou à un bannissement.
-- **Virtual Fisher interdit les macros** : votre progression peut être remise à zéro ou bannie.
-- L'application imite un rythme humain (délais aléatoires, pauses optionnelles), ce qui **réduit le risque sans l'annuler**.
-- Vous utilisez cet outil à vos propres risques. Il n'est pas affilié à Discord ni à Virtual Fisher.
-- Votre token est stocké **chiffré** (stockage sécurisé de Windows via Electron `safeStorage`), n'est jamais affiché ni écrit dans les journaux, et n'est envoyé qu'à Discord.
+- **Using your account token (self-bot) is against Discord's Terms of Service.** Your account can be suspended or banned.
+- **Virtual Fisher forbids macros**: your progress can be reset or banned.
+- The app mimics a human pace (random delays, optional breaks), which **lowers the risk without removing it**.
+- You use this tool at your own risk. It is not affiliated with Discord or Virtual Fisher.
+- Your token is stored **encrypted** (Windows secure storage through Electron `safeStorage`), is never displayed or written to the logs, and is only sent to Discord.
 
 ## Installation
 
-### Depuis l'installeur
+### From the installer
 
-1. Téléchargez `VirtualAutoFisher-Setup-x.y.z.exe` depuis l'onglet **Releases** du dépôt GitHub (ou construisez-le avec `npm run build:win`, il arrive dans `dist/`).
-2. Exécutez l'installeur : vous pouvez choisir le dossier d'installation.
-3. Windows SmartScreen peut afficher un avertissement car l'installeur n'est pas signé : « Informations complémentaires » puis « Exécuter quand même ».
+1. Download `VirtualAutoFisher-Setup-x.y.z.exe` from the **Releases** tab of this repository (or build it with `npm run build:win`, it lands in `dist/`).
+2. Run the installer: you can pick the install folder.
+3. Windows SmartScreen may warn you because the installer is not signed: "More info", then "Run anyway".
 
-### Depuis les sources
+To update, run the new installer over the installed version: your settings, token and saved values are kept.
 
-Prérequis : Node.js 20 ou plus récent.
+### From source
+
+Requirements: Node.js 20 or newer.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Récupérer son token Discord
+## Getting your Discord token
 
-1. Ouvrez Discord dans votre navigateur (`discord.com/app`) et connectez-vous.
-2. Appuyez sur **F12** pour ouvrir les outils de développement.
-3. Allez dans l'onglet **Réseau** (Network).
-4. Tapez `api` dans le filtre, puis cliquez sur une requête.
-5. Dans les en-têtes de requête, copiez la valeur de **authorization**.
+1. Open Discord in your browser (`discord.com/app`) and log in.
+2. Press **F12** to open the developer tools.
+3. Go to the **Network** tab.
+4. Type `api` in the filter, then click any request.
+5. In the request headers, copy the value of **authorization**.
 
-Ne partagez jamais ce token : il donne un accès complet à votre compte. Ces mêmes étapes sont rappelées dans l'application (« Comment trouver mon token ? »).
+Never share this token: it gives full access to your account. The same steps are shown in the app ("How do I find my token?").
 
-## Premier lancement
+## First launch
 
-1. Lisez l'avertissement, cochez « J'ai compris les risques », collez votre token puis cliquez sur **Connexion**. Votre avatar et votre pseudo s'affichent pour confirmer.
-2. Choisissez un **serveur** (ceux qui ont Virtual Fisher sont en premier, avec un badge) puis un **salon** texte, et validez avec « Utiliser ce salon ». Vous pouvez en changer à tout moment depuis la barre du haut du tableau de bord.
-3. Cliquez sur **Démarrer**. L'application lit les commandes slash du bot sur ce serveur, puis lance la pêche.
+1. Read the warning, tick **I understand the risks**, paste your token and click **Log in**. Your avatar and username are shown to confirm.
+2. Pick a **server** (servers with Virtual Fisher come first, with a badge; the result is remembered, **Refresh** re-checks), then a text **channel**, and confirm with **Use this channel**. You can switch at any time from the dashboard's top bar (**Back** returns without changing anything).
+3. Click **Start**. The app reads the bot's slash commands on that server, refreshes your data (`/profile`, `/boosts`, `/daily` when due, `/quests`) and starts fishing.
 
-## Captcha : résolution manuelle uniquement
+## What it does
 
-Virtual Fisher envoie parfois un captcha (`/verify`). Quand cela arrive :
+- **Fishing** in a loop with a randomized cooldown, at most one command at a time with a minimum gap between commands.
+- **Graceful stop**: **Stop** (or the session limit) stops `/fish`, runs `/profile` then `/quests` to refresh your data, then stops (25 s max). **Force stop** stops immediately.
+- **Auto buffs** (fish + treasure): buys both buffs back to back (nothing in between), runs `/boosts`, waits until **both** buffs are over, then starts again.
+- **Personal boosters** (opt-in): when no personal boost is active, runs `/boosters`, then `/use Personal` if you have one, then `/boosts`.
+- **Daily**: `/daily` only when it is due; the next daily time is remembered even when the app is closed.
+- **Quests**: refreshed at start, every 30 min and right after a "QUEST COMPLETE".
+- **Saved values**: balance, fish value, level, XP to next level, rod, biome, bait and rare fish are saved and shown on the next launch, then refreshed by `/profile`.
+- **Session gain**: "+$X this session" = fish value gained since the session's first `/profile`, plus what you sold.
+- **Quick commands** at the bottom of the dashboard (`/sell all`, `/daily`, `/quests`, `/boosts`, `/boosters`, `/use Personal`, `/use Global`, `/profile`, `/top` with its category, `/coinflip`, and a free command field) work with or without a fishing session.
 
-- toute la file de commandes est vidée et **plus aucune commande automatique n'est envoyée** ;
-- une notification Windows cliquable apparaît (avec un son si activé), l'icône de la barre des tâches clignote et l'icône de la zone de notification devient rouge ;
-- un panneau non fermable affiche l'image et le dernier message du bot. Vous tapez la réponse puis cliquez sur **Valider** (ou appuyez sur Entrée) : c'est ce clic qui envoie `/verify`. **Nouvelle image** demande une autre image quand le bot le permet ;
-- si la réponse est fausse, le panneau reste ouvert avec le message du bot ; si elle est bonne, la pêche reprend après un délai aléatoire de 5 à 15 secondes.
+## Captcha: manual solving only
 
-**Pourquoi manuel ?** Le captcha est là pour vérifier qu'un humain joue. Contourner cela (OCR, service tiers) rendrait l'automatisation bien plus facile à détecter et irait directement contre les règles du bot. L'application **n'envoie jamais `/verify` sans votre action** et ne résout jamais un captcha à votre place. Si vous ne répondez pas, elle attend.
+Virtual Fisher sometimes sends a captcha (`/verify`). When that happens:
 
-## Réglages (appliqués immédiatement)
+- the command queue is emptied and **no automatic command is sent anymore**;
+- a clickable Windows notification appears (with a sound if enabled), the taskbar button flashes and the tray icon turns red;
+- a panel that cannot be dismissed shows the captcha image (if any) and the bot's message, rendered as Discord shows it. You type the answer and click **Submit** (or press Enter): that click is what sends `/verify`. **New image** asks for another image when the bot allows it. **Stop fishing** stops the engine without sending anything (e.g. a false alarm);
+- if the answer is wrong, the panel stays open with the bot's message; if it is right, fishing resumes after a random 5–15 s delay.
 
-- **Pêche** : délai de base (min 2 s), variation aléatoire (0 à 5 s), écart minimum entre deux commandes (min 2 s).
-- **Vente** : activation, déclencheur (toutes les N prises ou N minutes).
-- **Buffs et appât** : buffs fish et treasure (5 ou 20 min), achat d'appât avec quantité automatique ou fixe.
-- **Profil, daily et quêtes** : intervalle d'actualisation du profil, `/daily`, `/quests`.
-- **Humanisation** : pauses régulières (durée de pêche et de pause avec variation), arrêt automatique après N heures.
-- **Notifications** : captcha, son, niveau supérieur, poisson rare.
-- **Compte** : changer de token, se déconnecter.
-- **Avancé** : réduire dans la barre système à la fermeture, mode capture, ouverture du dossier de données.
+**Why manual?** The captcha is there to check that a human is playing. Bypassing it (OCR, third-party services) would make automation much easier to detect and goes directly against the bot's rules. The app **never sends `/verify` without your action** and never solves a captcha for you, not even a text captcha whose code is written in the message. If you don't answer, it waits.
 
-Une option dont la commande n'existe pas sur le serveur choisi affiche « Commande indisponible » et est ignorée par l'automatisation.
+## Settings (applied immediately)
 
-Fermer la fenêtre **réduit l'application dans la barre système** (option réglable). Pour quitter vraiment : clic droit sur l'icône de la zone de notification puis **Quitter**. Le menu permet aussi d'afficher la fenêtre et de démarrer ou mettre en pause.
+- **Account**: change token, log out.
+- **Fishing**: base delay between two `/fish` (min 2 s), random variation (0–5 s), minimum gap between two commands (min 2 s).
+- **Selling**: auto sell (`/sell all`), trigger (every N catches or every N minutes).
+- **Buffs and bait**: auto buffs (fish + treasure, 5 or 20 min), auto-activate a personal booster, auto buy bait (automatic or fixed amount).
+- **Profile, daily and quests**: profile refresh interval, auto daily, quest tracking.
+- **Humanization**: regular breaks (fishing time and break length, with variation), stop automatically after N hours.
+- **Notifications**: captcha, sound, level up, rare fish.
+- **Advanced**: minimize to the system tray when closing the window, capture mode, open the data folder.
 
-## Mode capture et emplacement des fichiers
+An option whose command does not exist on the chosen server shows "Command unavailable" and is ignored by the automation.
 
-Les données sont dans `%APPDATA%\virtual-autofisher\` :
+Closing the window **minimizes the app to the system tray** (configurable). To really quit: right-click the tray icon, then **Quit**. The tray menu also lets you show the window and start, pause or stop.
 
-| Élément | Emplacement |
+## Capture mode and file locations
+
+Data lives in `%APPDATA%\virtual-autofisher\`:
+
+| Item | Location |
 |---|---|
-| Configuration (token chiffré) | `config.json` (sauvegarde : `config.bak.json`) |
-| Journaux | `logs\app.log` (rotation à 5 Mo) |
-| Résumés de session | `sessions\` |
-| Captures de messages du bot | `captures\` (mode capture) |
+| Settings (encrypted token) | `config.json` (backup: `config.bak.json`) |
+| Saved values (account, next daily, servers with Virtual Fisher) | `state.json` |
+| Logs | `logs\app.log` (rotated at 5 MB) |
+| Session summaries | `sessions\` |
+| Captured bot messages | `captures\` (capture mode) |
 
-Le **mode capture** (Réglages > Avancé) enregistre les messages bruts du bot dans `captures\`. Il sert à diagnostiquer ou améliorer la reconnaissance des réponses quand le bot change son format. Les captures peuvent contenir votre pseudo : relisez-les avant de les partager. Le bouton « Ouvrir le dossier de données » ouvre ce répertoire.
+**Capture mode** (Settings > Advanced) saves the bot's raw messages to `captures\`. It is used to diagnose or improve reply recognition when the bot changes its format. Captures may contain your username and other players' names: review them before sharing. **Open the data folder** opens this directory.
 
-## Scripts npm
+## npm scripts
 
-| Commande | Rôle |
+| Command | Purpose |
 |---|---|
-| `npm run dev` | Développement avec rechargement à chaud |
+| `npm run dev` | Development with hot reload |
 | `npm test` | Tests (Vitest) |
-| `npm run typecheck` | Vérification TypeScript (processus principal et interface) |
-| `npm run build` | Compilation (`out/`) |
-| `npm run build:win` | Installeur NSIS dans `dist/` |
-| `node scripts/make-icons.mjs` | Régénère les icônes (`resources/`, `build/icon.ico`) |
+| `npm run typecheck` | TypeScript check (main process and UI) |
+| `npm run build` | Build (`out/`) |
+| `npm run build:win` | NSIS installer in `dist/` |
+| `node scripts/make-icons.mjs` | Regenerates the icons (`resources/`, `build/icon.ico`) |
 
-## Dépannage
+## Troubleshooting
 
-- **Token invalide** : le token est refusé ou a expiré (changer de mot de passe Discord le révoque). Récupérez-en un nouveau (voir plus haut) puis utilisez Réglages > Compte > « Changer de token », ou déconnectez-vous et recommencez l'onboarding.
-- **Virtual Fisher absent du serveur** : le bot n'est pas présent (ou pas visible) sur ce serveur, ou la commande `/fish` est introuvable. Choisissez un serveur marqué du badge Virtual Fisher, ou invitez le bot, puis relancez.
-- **« Commande indisponible »** : la commande correspondante (`/sell`, `/buy`, `/daily`, `/quests`, `/profile`) n'est pas exposée par le bot sur ce serveur ; l'option est ignorée. Les commandes sont relevées au démarrage : démarrez la pêche une fois pour les découvrir.
-- **Le bot ne répond plus** : après 3 absences de réponse (8 s chacune), l'application se met en pause. Vérifiez le salon, puis cliquez sur Reprendre.
-- **Un message n'est pas reconnu** : activez le mode capture, reproduisez le cas et consultez `captures\` et `logs\app.log`.
+- **Invalid token**: the token was refused or has expired (changing your Discord password revokes it). Get a new one (see above), then use Settings > Account > **Change token**, or log out and go through onboarding again.
+- **No Virtual Fisher on the server**: the bot is not on that server (or not visible), or `/fish` cannot be found. Pick a server with the Virtual Fisher badge, or invite the bot, then click **Refresh**.
+- **"Command unavailable"**: the matching command is not exposed by the bot on that server; the option is ignored. Commands are loaded when you log in or pick a channel.
+- **The bot stops answering**: after 3 missing replies (8 s each) the app pauses. Check the channel, then click **Resume**.
+- **A message is not recognized**: enable capture mode, reproduce the case and look at `captures\` and `logs\app.log`.
 
-## Captures d'écran
+## Screenshots
 
-<!-- TODO (utilisateur) : ajouter des captures d'écran : onboarding, tableau de bord, réglages, panneau captcha. -->
+<!-- TODO (owner): add screenshots: onboarding, dashboard, settings, captcha panel. -->
 
-*À venir.*
+*Coming soon.*
 
-## Publier une nouvelle version
+## Releasing a new version
 
-Chaque push sur `main` lance la GitHub Action [release.yml](.github/workflows/release.yml) : si la version de `package.json` n'a pas encore de release `v<version>`, elle lance les tests, construit l'installeur Windows et crée la release avec le `.exe`. Sinon elle ne fait rien.
+Every push to `main` runs the GitHub Action [release.yml](.github/workflows/release.yml): if the `package.json` version has no `v<version>` release yet, it runs the type check and the tests, builds the Windows installer and creates the release with the `.exe`. Otherwise it does nothing.
 
 ```bash
-npm version 1.0.1
+npm version 1.0.4
 git push
 ```
