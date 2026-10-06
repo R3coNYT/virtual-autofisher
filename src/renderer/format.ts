@@ -41,17 +41,6 @@ export function catchesPerHour(catches: number, startedAt: number | null, now: n
   return Math.round((catches / elapsed) * 3_600_000)
 }
 
-/**
- * Estimated XP bar fill (0..1) from the level and the XP still missing. The bot only reports
- * "XP to next level", so the per-level requirement is an ESTIMATE (500 x (level + 1)); the exact
- * remaining XP must be shown next to the bar. null when level or xpToNext is unknown.
- */
-export function xpProgress(level: number | null, xpToNext: number | null): number | null {
-  if (level == null || xpToNext == null) return null
-  const required = Math.max(1, 500 * (level + 1))
-  return Math.min(1, Math.max(0, 1 - xpToNext / required))
-}
-
 export type LogFilter = 'all' | 'catch' | 'trade' | 'system'
 
 export function logFilter(entry: LogEntry, filter: LogFilter): boolean {
@@ -112,4 +101,23 @@ export function coinflipOptionNames(cmd: SlashCommandInfo | undefined): { side: 
   const side = opts.find((o) => /side|choice|face/i.test(o.name)) ?? opts[0]
   const amount = opts.find((o) => /amount|bet|montant/i.test(o.name)) ?? opts.find((o) => o !== side)
   return { side: side?.name ?? 'side', amount: amount?.name ?? 'amount', choices: side?.choices }
+}
+
+/** Option set for `/sell all`: the option whose choices include "all", else the first option, else none. */
+export function sellAllOptions(cmd: SlashCommandInfo): Record<string, string | number> {
+  const opt =
+    cmd.options.find((o) => o.choices?.some((c) => c.toLowerCase() === 'all')) ?? cmd.options[0]
+  if (!opt) return {}
+  const all = opt.choices?.find((c) => c.toLowerCase() === 'all') ?? 'all'
+  return { [opt.name]: all }
+}
+
+/** Quest completion 0..1 from a "3/10" style progress string. */
+export function questRatio(progress: string, done: boolean): number {
+  if (done) return 1
+  const m = /(\d[\d\s,.]*)\s*\/\s*(\d[\d\s,.]*)/.exec(progress)
+  if (!m) return 0
+  const n = (s: string): number => Number(s.replace(/[\s,]/g, ''))
+  const total = n(m[2])
+  return total > 0 ? Math.min(1, n(m[1]) / total) : 0
 }

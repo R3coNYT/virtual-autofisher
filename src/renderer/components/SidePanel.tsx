@@ -1,7 +1,8 @@
 import { CalendarClock, Fish, Map, Package } from 'lucide-react'
+import { memo } from 'react'
 import type { ReactNode } from 'react'
 import type { GameSnapshot } from '../../shared/types'
-import { formatDuration } from '../format'
+import { formatDuration, questRatio } from '../format'
 import { useNow } from '../useNow'
 import { cardCls } from './StatCard'
 
@@ -17,18 +18,10 @@ function Row({ icon, label, value }: { icon: ReactNode; label: string; value: st
   )
 }
 
-function questRatio(progress: string, done: boolean): number {
-  if (done) return 1
-  const m = /(\d[\d\s,.]*)\s*\/\s*(\d[\d\s,.]*)/.exec(progress)
-  if (!m) return 0
-  const n = (s: string): number => Number(s.replace(/[\s,]/g, ''))
-  const total = n(m[2])
-  return total > 0 ? Math.min(1, n(m[1]) / total) : 0
-}
+type Props = { account: GameSnapshot['account']; quests: GameSnapshot['quests']; nextDailyAt: number | null }
 
-export function SidePanel({ game }: { game: GameSnapshot }): JSX.Element {
+export const SidePanel = memo(function SidePanel({ account, quests, nextDailyAt }: Props): JSX.Element {
   const now = useNow()
-  const { account, quests, nextDailyAt } = game
   const daily = nextDailyAt == null ? '—' : nextDailyAt <= now ? 'Disponible' : formatDuration(nextDailyAt - now)
   return (
     <aside aria-label="Informations du compte" className={`${cardCls} flex flex-col gap-4 p-4`}>
@@ -46,8 +39,8 @@ export function SidePanel({ game }: { game: GameSnapshot }): JSX.Element {
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Quêtes du jour</h3>
         {quests.length === 0 && <p className="text-xs text-slate-500">Aucune quête connue.</p>}
         <ul className="flex flex-col gap-2.5">
-          {quests.map((q) => (
-            <li key={q.label}>
+          {quests.map((q, i) => (
+            <li key={`${i}-${q.label}`}>
               <div className="flex justify-between gap-2 text-xs">
                 <span className={q.done ? 'text-turquoise' : 'text-slate-200'}>{q.label}</span>
                 <span className="shrink-0 text-slate-400">{q.done ? 'Terminée' : q.progress}</span>
@@ -68,4 +61,4 @@ export function SidePanel({ game }: { game: GameSnapshot }): JSX.Element {
       </div>
     </aside>
   )
-}
+})

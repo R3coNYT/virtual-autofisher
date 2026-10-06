@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { LogEntry } from '../../shared/types'
 import { logFilter } from '../format'
 import type { LogFilter } from '../format'
@@ -22,7 +22,7 @@ const TYPE_CLS: Record<LogEntry['type'], string> = {
 
 const time = (at: number): string => new Date(at).toLocaleTimeString('fr-FR')
 
-export function CatchLog({ log, compact }: { log: LogEntry[]; compact: boolean }): JSX.Element {
+export const CatchLog = memo(function CatchLog({ log, compact }: { log: LogEntry[]; compact: boolean }): JSX.Element {
   const [filter, setFilter] = useState<LogFilter>('all')
   const [limit, setLimit] = useState(PAGE)
   const box = useRef<HTMLDivElement>(null)
@@ -95,4 +95,4 @@ export function CatchLog({ log, compact }: { log: LogEntry[]; compact: boolean }
       </div>
     </section>
   )
-}
+})

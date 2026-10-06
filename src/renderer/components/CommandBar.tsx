@@ -1,8 +1,8 @@
-import { useId, useState } from 'react'
+import { memo, useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Send } from 'lucide-react'
 import type { EngineState, SlashCommandInfo } from '../../shared/types'
-import { coinflipOptionNames, parseCommandLine } from '../format'
+import { coinflipOptionNames, parseCommandLine, sellAllOptions } from '../format'
 import { useStore } from '../store'
 import { cleanError, focusRing } from '../ui'
 import { cardCls } from './StatCard'
@@ -11,7 +11,7 @@ const ACTIVE: EngineState[] = ['running', 'paused', 'resting']
 
 type Quick = { label: string; name: string; options?: (cmd: SlashCommandInfo) => Record<string, string | number> }
 const QUICK: Quick[] = [
-  { label: '/sell all', name: 'sell', options: (c) => (c.options[0] ? { [c.options[0].name]: 'all' } : {}) },
+  { label: '/sell all', name: 'sell', options: sellAllOptions },
   { label: '/daily', name: 'daily' },
   { label: '/quests', name: 'quests' },
   { label: '/boosts', name: 'boosts' },
@@ -22,7 +22,7 @@ const QUICK: Quick[] = [
 const btn = `rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 ${focusRing}`
 const field = `rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 disabled:opacity-40 ${focusRing}`
 
-export function CommandBar(): JSX.Element {
+export const CommandBar = memo(function CommandBar(): JSX.Element {
   const commands = useStore((s) => s.commands)
   const engineState = useStore((s) => s.engineState)
   const [side, setSide] = useState('')
@@ -86,7 +86,7 @@ export function CommandBar(): JSX.Element {
         >
           {sides.map((s) => (
             <option key={s} value={s} className="bg-ocean">
-              {s === 'heads' ? 'Pile (heads)' : s === 'tails' ? 'Face (tails)' : s}
+              {flip.choices?.length ? s.charAt(0).toUpperCase() + s.slice(1) : s === 'heads' ? 'Face (heads)' : 'Pile (tails)'}
             </option>
           ))}
         </select>
@@ -134,4 +134,4 @@ export function CommandBar(): JSX.Element {
       </form>
     </section>
   )
-}
+})

@@ -7,7 +7,8 @@ import {
   logFilter,
   coinflipOptionNames,
   parseCommandLine,
-  xpProgress
+  questRatio,
+  sellAllOptions
 } from '../../src/renderer/format'
 import type { LogEntry, SlashCommandInfo } from '../../src/shared/types'
 
@@ -55,22 +56,6 @@ describe('catchesPerHour', () => {
   it('returns null when it cannot be computed', () => {
     expect(catchesPerHour(5, null, 1000)).toBeNull()
     expect(catchesPerHour(5, 1000, 1000)).toBeNull()
-  })
-})
-
-describe('xpProgress', () => {
-  it('returns null when unknown', () => {
-    expect(xpProgress(null, 100)).toBeNull()
-    expect(xpProgress(5, null)).toBeNull()
-  })
-  it('stays within 0..1', () => {
-    for (const [l, x] of [[1, 0], [12, 3450], [30, 99_999_999]] as const) {
-      const p = xpProgress(l, x)
-      expect(p).not.toBeNull()
-      expect(p!).toBeGreaterThanOrEqual(0)
-      expect(p!).toBeLessThanOrEqual(1)
-    }
-    expect(xpProgress(10, 0)).toBe(1)
   })
 })
 
@@ -143,5 +128,28 @@ describe('coinflipOptionNames', () => {
     }
     expect(coinflipOptionNames(pos)).toMatchObject({ side: 'a', amount: 'b' })
     expect(coinflipOptionNames(undefined)).toMatchObject({ side: 'side', amount: 'amount' })
+  })
+})
+
+describe('sellAllOptions', () => {
+  const mk = (options: SlashCommandInfo['options']): SlashCommandInfo => ({ name: 'sell', id: '1', version: '1', options })
+  it('prefers the option whose choices include all (case-insensitive)', () => {
+    expect(
+      sellAllOptions(mk([{ name: 'item', type: 3, required: false }, { name: 'what', type: 3, required: true, choices: ['One', 'All'] }]))
+    ).toEqual({ what: 'All' })
+  })
+  it('falls back to the first option, or none', () => {
+    expect(sellAllOptions(mk([{ name: 'x', type: 3, required: false }]))).toEqual({ x: 'all' })
+    expect(sellAllOptions(mk([]))).toEqual({})
+  })
+})
+
+describe('questRatio', () => {
+  it('parses a/b progress', () => {
+    expect(questRatio('3/10', false)).toBeCloseTo(0.3)
+    expect(questRatio('1 200 / 2 400', false)).toBeCloseTo(0.5)
+    expect(questRatio('15/10', false)).toBe(1)
+    expect(questRatio('?', false)).toBe(0)
+    expect(questRatio('?', true)).toBe(1)
   })
 })

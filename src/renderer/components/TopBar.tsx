@@ -1,4 +1,5 @@
 import { ChevronDown, Hash, Loader2, Pause, Play, Settings, Square } from 'lucide-react'
+import { memo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { formatDuration } from '../format'
 import { useStore } from '../store'
@@ -13,11 +14,16 @@ const STOP = 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
 const ICON = 'h-3.5 w-3.5'
 
 function Control(props: { label: string; icon: ReactNode; run: () => Promise<void>; tone: string }): JSX.Element {
+  const [pending, setPending] = useState(false)
   const onClick = (): void => {
-    props.run().catch((e) => useStore.getState().pushToast({ level: 'error', message: cleanError(e) }))
+    setPending(true)
+    props
+      .run()
+      .catch((e) => useStore.getState().pushToast({ level: 'error', message: cleanError(e) }))
+      .finally(() => setPending(false))
   }
   return (
-    <button type="button" onClick={onClick} className={`${ctl} ${props.tone}`}>
+    <button type="button" onClick={onClick} disabled={pending} className={`${ctl} ${props.tone}`}>
       {props.icon}
       {props.label}
     </button>
@@ -35,7 +41,7 @@ function SessionClock(): JSX.Element | null {
   )
 }
 
-export function TopBar(): JSX.Element {
+export const TopBar = memo(function TopBar(): JSX.Element {
   const state = useStore((s) => s.engineState)
   const names = useStore((s) => s.targetNames)
   const target = useStore((s) => s.target)
@@ -89,4 +95,4 @@ export function TopBar(): JSX.Element {
       </div>
     </header>
   )
-}
+})
