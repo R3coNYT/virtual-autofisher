@@ -2,7 +2,7 @@ import type { DiscordClient } from '../discord/DiscordClient'
 import type { ConfigStore } from '../config/ConfigStore'
 import type { Logger } from '../util/logger'
 import { parseMessage } from '../parser'
-import type { BotMessage, EngineState, GameEvent, PauseReason, SlashCommandInfo } from '../../shared/types'
+import type { BotMessage, EngineState, GameEvent, PauseReason, SessionSummary, SlashCommandInfo } from '../../shared/types'
 import { CommandQueue, type QueuedCommand } from './CommandQueue'
 import type { GameState } from './GameState'
 import { Scheduler } from './Scheduler'
@@ -43,6 +43,7 @@ export class Engine {
   private target: Target | null = null
   private gen = 0
   private listeners = new Set<StateCb>()
+  private sessionEndListeners = new Set<(s: SessionSummary) => void>()
   private readonly queue: CommandQueue
   private readonly scheduler: Scheduler
   private readonly captcha: CaptchaFlow
@@ -114,6 +115,12 @@ export class Engine {
   onState(cb: StateCb): () => void {
     this.listeners.add(cb)
     return () => this.listeners.delete(cb)
+  }
+
+  /** Called with the summary each time a session ends (stop, error, session limit). */
+  onSessionEnd(cb: (s: SessionSummary) => void): () => void {
+    this.sessionEndListeners.add(cb)
+    return () => this.sessionEndListeners.delete(cb)
   }
 
   async start(target: Target): Promise<void> {
@@ -347,7 +354,16 @@ export class Engine {
     this.clearNetworkTimer()
     if (this.sessionTimer) clearInterval(this.sessionTimer)
     this.sessionTimer = null
-    if (this.sessionActive) this.gameState.endSession()
+    if (this.sessionActive) {
+      const summary = this.gameState.endSession()
+      for (const cb of this.sessionEndListeners) {
+        try {
+          cb(summary)
+        } catch (err) {
+          this.logger.error('Session end listener failed', err) // must not re-enter halt()
+        }
+      }
+    }
     this.sessionActive = false
     this.target = null
     this.client.setActiveChannel(null)

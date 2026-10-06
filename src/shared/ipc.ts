@@ -6,22 +6,28 @@ import type {
   GameSnapshot,
   GuildInfo,
   LogEntry,
-  PauseReason,
   SelfUser,
   SlashCommandInfo
 } from './types'
 
 /** Événements main → renderer : nom du canal → type de la charge utile. */
 export type EventMap = {
-  'engine.state': { state: EngineState; reason?: PauseReason; message?: string }
+  'engine.state': { state: EngineState; info?: { reason?: string; captchaImageUrl?: string; captchaText?: string } }
   'engine.commands': SlashCommandInfo[]
-  'game.patch': DeepPartial<GameSnapshot>
+  /**
+   * `patch` is a partial snapshot. The renderer must REPLACE (not deep-merge) the nested section
+   * values it contains (fishBySpecies, totals, rare, boosts, quests, ...): a key missing from a
+   * replaced section means it was removed. `newLog` holds the log entries appended by this patch.
+   */
+  'game.patch': { patch: DeepPartial<GameSnapshot>; newLog: LogEntry[] }
   'log.append': LogEntry
   'captcha.show': { imageUrl?: string; text: string }
   'captcha.hide': undefined
-  'connection.status': { connected: boolean }
+  'connection.status': { status: ConnectionStatus; message?: string }
   toast: { level: 'info' | 'success' | 'error'; message: string }
 }
+
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'invalidToken'
 
 export type EventChannel = keyof EventMap
 
@@ -30,6 +36,8 @@ export type Api = {
   auth: {
     setToken(token: string): Promise<SelfUser>
     logout(): Promise<void>
+    /** Connection state at launch, to pick the first screen. */
+    status(): Promise<{ user: SelfUser | null; target: { guildId: string; channelId: string } | null }>
   }
   guilds: { list(): Promise<GuildInfo[]> }
   channels: { list(guildId: string): Promise<ChannelInfo[]> }
@@ -41,7 +49,7 @@ export type Api = {
     stop(): Promise<void>
     commands(): Promise<SlashCommandInfo[]>
   }
-  command: { send(name: string, options?: Record<string, string | number | boolean>): Promise<void> }
+  command: { send(name: string, options?: Record<string, string | number>): Promise<void> }
   captcha: {
     submit(answer: string): Promise<void>
     regen(): Promise<void>
@@ -50,5 +58,6 @@ export type Api = {
     get(): Promise<Config>
     update(patch: DeepPartial<Config>): Promise<Config>
   }
+  app: { openDataDir(): Promise<void> }
   on<C extends EventChannel>(channel: C, cb: (payload: EventMap[C]) => void): () => void
 }

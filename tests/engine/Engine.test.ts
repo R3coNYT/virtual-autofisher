@@ -588,6 +588,24 @@ describe('Engine', () => {
     expect(logger.error).toHaveBeenCalled()
   })
 
+  it('onSessionEnd delivers the summary once on stop, and a throwing listener is contained', async () => {
+    const { client, engine, state, logger } = setup()
+    const got: { catches: number; endedAt: number }[] = []
+    engine.onSessionEnd(() => {
+      throw new Error('boom')
+    })
+    engine.onSessionEnd((s) => got.push(s))
+    await engine.start(A)
+    client.emitBot(CATCH)
+    expect(() => engine.stop()).not.toThrow()
+    engine.stop()
+    expect(got).toHaveLength(1)
+    expect(got[0].catches).toBe(3)
+    expect(got[0].endedAt).toBeGreaterThan(0)
+    expect(state.snapshot().session.startedAt).toBeNull()
+    expect(logger.error).toHaveBeenCalled()
+  })
+
   it('stop → idle and nothing else is sent', async () => {
     const { client, engine, names } = setup()
     await engine.start(A)

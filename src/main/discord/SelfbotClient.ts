@@ -53,6 +53,11 @@ export class SelfbotClient implements DiscordClient {
 
   constructor(private readonly opts: SelfbotClientOpts = {}) {}
 
+  /** Enables (dir) or disables (null) raw message capture at runtime. */
+  setCaptureDir(dir: string | null): void {
+    this.opts.captureDir = dir ?? undefined
+  }
+
   on<E extends keyof DiscordEventMap>(event: E, cb: DiscordEventMap[E]): () => void {
     const set = this.listeners[event] as Set<DiscordEventMap[E]>
     set.add(cb)
