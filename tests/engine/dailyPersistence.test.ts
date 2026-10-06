@@ -150,8 +150,9 @@ describe('wireStatePersistence', () => {
     await engine.start(A)
     await tick(10_000) // the start /profile refreshes the account
     expect(state.snapshot().account.balance).toBe(2_000)
+    expect(save).toHaveBeenCalledTimes(2) // the new account values are saved without waiting for the end
     engine.stop()
-    expect(save).toHaveBeenCalledTimes(2)
+    expect(save).toHaveBeenCalledTimes(3)
     const saved = store.load()!
     expect(saved.account).toMatchObject({ balance: 2_000, level: 12, fishValue: 500 })
     expect(saved.nextDailyAt).toBe(state.nextDailyAt)
