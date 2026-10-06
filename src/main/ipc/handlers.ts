@@ -51,8 +51,11 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   const logger = deps.logger ?? noopLogger
   let user: SelfUser | null = null
 
-  const setConnection = (status: ConnectionStatus, message?: string): void =>
-    send('connection.status', message ? { status, message } : { status })
+  let lastConnection: EventMap['connection.status'] | null = null
+  const setConnection = (status: ConnectionStatus, message?: string): void => {
+    lastConnection = message ? { status, message } : { status }
+    send('connection.status', lastConnection)
+  }
 
   const handle = (channel: string, fn: (...args: any[]) => unknown): void => // eslint-disable-line @typescript-eslint/no-explicit-any
     ipc.handle(channel, async (_event, ...args) => {
@@ -127,7 +130,12 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     cancelRetry()
     setConnection('disconnected')
   })
-  handle('auth.status', () => ({ user, target: config.get().target }))
+  handle('auth.status', () => ({
+    user,
+    target: config.get().target,
+    hasToken: config.getToken() !== null,
+    connection: lastConnection
+  }))
 
   let retryTimer: ReturnType<typeof setTimeout> | null = null
   let attempt = 0

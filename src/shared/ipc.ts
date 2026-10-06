@@ -30,6 +30,15 @@ export type EventMap = {
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'invalidToken'
 
+export type AuthStatus = {
+  user: SelfUser | null
+  target: { guildId: string; channelId: string } | null
+  /** A stored token exists (auto-login is, or will be, attempted). */
+  hasToken: boolean
+  /** Last connection status emitted by main (buffered, so a late renderer still sees it). */
+  connection: EventMap['connection.status'] | null
+}
+
 export type EventChannel = keyof EventMap
 
 /** API exposée au renderer par le preload (window.api). */
@@ -38,7 +47,7 @@ export type Api = {
     setToken(token: string): Promise<SelfUser>
     logout(): Promise<void>
     /** Connection state at launch, to pick the first screen. */
-    status(): Promise<{ user: SelfUser | null; target: { guildId: string; channelId: string } | null }>
+    status(): Promise<AuthStatus>
   }
   guilds: { list(): Promise<GuildInfo[]> }
   channels: { list(guildId: string): Promise<ChannelInfo[]> }

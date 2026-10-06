@@ -167,7 +167,12 @@ describe('registerHandlers', () => {
     a.config.setToken(TOKEN)
     await a.api.autoLogin()
     expect(a.sent.map((s) => s.payload)).toEqual([{ status: 'connecting' }, { status: 'connected' }])
-    expect(await a.call('auth.status')).toMatchObject({ user: { username: 'tester' }, target: null })
+    expect(await a.call('auth.status')).toMatchObject({
+      user: { username: 'tester' },
+      target: null,
+      hasToken: true,
+      connection: { status: 'connected' }
+    })
 
     const b = setup()
     b.config.setToken(TOKEN)
@@ -175,7 +180,11 @@ describe('registerHandlers', () => {
     await b.api.autoLogin()
     expect(b.config.getToken()).toBeNull()
     expect(b.sent.at(-1)?.payload).toEqual({ status: 'invalidToken' })
-    expect(await b.call('auth.status')).toMatchObject({ user: null })
+    expect(await b.call('auth.status')).toMatchObject({
+      user: null,
+      hasToken: false,
+      connection: { status: 'invalidToken' }
+    })
   })
 
   it('auth.setToken with a bad token leaves a running session untouched', async () => {
