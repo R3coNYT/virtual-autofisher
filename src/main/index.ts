@@ -45,6 +45,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#0a1628',
     title: 'Virtual AutoFisher',
     icon: resourcePath('icon.png'),
+    autoHideMenuBar: !!process.env['ELECTRON_RENDERER_URL'], // dev: menu hidden, Alt shows it
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -84,7 +85,8 @@ function boot(): void {
   const state = new GameState()
   const engine = new Engine({ client: discord, config, state, logger })
   // last known account values and next daily (state.json): on screen before the login completes
-  const persisted = wireStatePersistence({ state, engine, store: new StateStore(userData, logger), logger })
+  const stateStore = new StateStore(userData, logger)
+  const persisted = wireStatePersistence({ state, engine, store: stateStore, logger })
 
   let win = createWindow()
   const send = (channel: string, payload: unknown): void => {
@@ -102,7 +104,8 @@ function boot(): void {
     openPath: (p) => shell.openPath(p),
     setCaptureDir: (dir) => discord.setCaptureDir(dir),
     captureDir: join(userData, 'captures'),
-    logger
+    logger,
+    vfStore: stateStore
   })
   // log in once the renderer is listening, so it receives connection.status
   win.webContents.once('did-finish-load', () => void autoLogin())

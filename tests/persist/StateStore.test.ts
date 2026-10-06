@@ -34,8 +34,8 @@ describe('StateStore', () => {
     const store = new StateStore(dir, logger(), () => 1234)
     store.save({ account, nextDailyAt: 99 })
     const raw = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'))
-    expect(raw).toEqual({ version: 1, account, nextDailyAt: 99, savedAt: 1234 })
-    expect(new StateStore(dir, logger()).load()).toEqual({ version: 1, account, nextDailyAt: 99, savedAt: 1234 })
+    expect(raw).toEqual({ version: 1, account, nextDailyAt: 99, vfGuilds: {}, savedAt: 1234 })
+    expect(new StateStore(dir, logger()).load()).toEqual({ version: 1, account, nextDailyAt: 99, vfGuilds: {}, savedAt: 1234 })
     expect(existsSync(join(dir, 'state.json.tmp'))).toBe(false)
   })
 
@@ -73,6 +73,36 @@ describe('StateStore', () => {
     expect(store.load()).toBeNull()
     store.save({ account, nextDailyAt: null })
     expect(store.load()?.account).toEqual(account)
+  })
+
+  it('vfGuilds: old files without it load as {}', () => {
+    writeFileSync(join(dir, 'state.json'), JSON.stringify({ version: 1, account, nextDailyAt: null, savedAt: 1 }))
+    expect(new StateStore(dir, logger()).load()?.vfGuilds).toEqual({})
+  })
+
+  it('vfGuilds: wrongly typed entries are dropped', () => {
+    writeFileSync(
+      join(dir, 'state.json'),
+      JSON.stringify({ version: 1, account, nextDailyAt: null, vfGuilds: { a: true, b: false, c: 'yes' }, savedAt: 1 })
+    )
+    expect(new StateStore(dir, logger()).load()?.vfGuilds).toEqual({ a: true, b: false })
+  })
+
+  it('setVfGuilds persists, keeps account, and later save() keeps the map', () => {
+    const store = new StateStore(dir, logger())
+    store.save({ account, nextDailyAt: 5 })
+    store.setVfGuilds({ g1: true, g2: false })
+    const again = new StateStore(dir, logger())
+    expect(again.load()).toMatchObject({ account, nextDailyAt: 5, vfGuilds: { g1: true, g2: false } })
+    again.save({ account: { ...account, level: 1 }, nextDailyAt: 6 }) // game save must not wipe the map
+    expect(new StateStore(dir, logger()).load()?.vfGuilds).toEqual({ g1: true, g2: false })
+    expect(new StateStore(dir, logger()).getVfGuilds()).toEqual({ g1: true, g2: false })
+  })
+
+  it('setVfGuilds without any file creates one with empty account', () => {
+    const store = new StateStore(dir, logger())
+    store.setVfGuilds({ g: true })
+    expect(new StateStore(dir, logger()).load()).toMatchObject({ account: {}, vfGuilds: { g: true } })
   })
 
   it('creates the directory when missing', () => {

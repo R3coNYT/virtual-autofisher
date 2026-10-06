@@ -48,8 +48,22 @@ export class FakeDiscordClient implements DiscordClient {
 
   async logout(): Promise<void> {}
 
-  async listGuilds(): Promise<GuildInfo[]> {
+  vfCache: Record<string, boolean> = {}
+  listGuildsCalls: ({ refresh?: boolean } | undefined)[] = []
+
+  async listGuilds(opts?: { refresh?: boolean }): Promise<GuildInfo[]> {
+    this.listGuildsCalls.push(opts)
+    if (opts?.refresh) this.vfCache = {}
+    for (const g of this.guilds) this.vfCache[g.id] = g.hasVirtualFisher
     return this.guilds
+  }
+
+  seedVfCache(map: Record<string, boolean>): void {
+    Object.assign(this.vfCache, map)
+  }
+
+  getVfCache(): Record<string, boolean> {
+    return { ...this.vfCache }
   }
 
   async listChannels(guildId: string): Promise<ChannelInfo[]> {

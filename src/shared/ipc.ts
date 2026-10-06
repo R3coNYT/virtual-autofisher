@@ -62,7 +62,8 @@ export type Api = {
     /** Connection state at launch, to pick the first screen. */
     status(): Promise<AuthStatus>
   }
-  guilds: { list(): Promise<GuildInfo[]> }
+  /** `refresh`: forget which servers have Virtual Fisher and check them all again. */
+  guilds: { list(opts?: { refresh?: boolean }): Promise<GuildInfo[]> }
   channels: { list(guildId: string): Promise<ChannelInfo[]> }
   target: { set(guildId: string, channelId: string): Promise<void> }
   engine: {

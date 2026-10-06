@@ -30,6 +30,8 @@ export type HandlerDeps = {
   setCaptureDir?: (dir: string | null) => void
   captureDir?: string
   logger?: Logger
+  /** Persists the Virtual Fisher detection per guild (state.json). Never holds the token. */
+  vfStore?: { getVfGuilds(): Record<string, boolean>; setVfGuilds(map: Record<string, boolean>): void }
 }
 
 /** The only config shape allowed to cross to the renderer: never carries the encrypted token. */
@@ -119,6 +121,14 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     }
   })
 
+  const seedVf = (): void => {
+    try {
+      if (deps.vfStore) client.seedVfCache(deps.vfStore.getVfGuilds())
+    } catch (e) {
+      logger.warn('Unable to seed the server cache', e)
+    }
+  }
+
   // --- auth ---------------------------------------------------------------------------------
   handle('auth.setToken', async (token: string) => {
     loginGen++
@@ -140,6 +150,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
       throw e
     }
     user = me
+    seedVf()
     setConnection('connected')
     return me
   })
@@ -179,6 +190,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
       const me = await client.login(token)
       if (gen !== loginGen) return // a manual setToken started meanwhile
       user = me
+      seedVf()
       attempt = 0
       setConnection('connected')
     } catch (e) {
@@ -196,7 +208,17 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   }
 
   // --- discord lookups / target -------------------------------------------------------------
-  handle('guilds.list', () => client.listGuilds())
+  handle('guilds.list', async (opts?: { refresh?: boolean }) => {
+    const refresh = opts?.refresh === true
+    if (refresh) deps.vfStore?.setVfGuilds({}) // also forgets what a previous run learned
+    const list = await client.listGuilds({ refresh })
+    try {
+      deps.vfStore?.setVfGuilds(client.getVfCache())
+    } catch (e) {
+      logger.warn('Unable to save the server cache', e)
+    }
+    return list
+  })
   handle('channels.list', (guildId: string) => {
     assertId(guildId, 'server')
     return client.listChannels(guildId)

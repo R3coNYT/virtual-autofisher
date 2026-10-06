@@ -9,7 +9,7 @@ const api: Api = {
     logout: () => invoke('auth.logout'),
     status: () => invoke('auth.status')
   },
-  guilds: { list: () => invoke('guilds.list') },
+  guilds: { list: (opts) => invoke('guilds.list', opts) },
   channels: { list: (guildId) => invoke('channels.list', guildId) },
   target: { set: (guildId, channelId) => invoke('target.set', guildId, channelId) },
   engine: {

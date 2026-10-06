@@ -25,7 +25,11 @@ export interface DiscordClient {
   /** Rejects if the token is invalid. */
   login(token: string): Promise<SelfUser>
   logout(): Promise<void>
-  listGuilds(): Promise<GuildInfo[]>
+  /** `refresh` drops the cached Virtual Fisher detection and re-checks every server. */
+  listGuilds(opts?: { refresh?: boolean }): Promise<GuildInfo[]>
+  /** Preloads known detection results (guild id to VF present), e.g. from the previous run. */
+  seedVfCache(map: Record<string, boolean>): void
+  getVfCache(): Record<string, boolean>
   /** Text channels where we can write and use slash commands. */
   listChannels(guildId: string): Promise<ChannelInfo[]>
   getBotCommands(guildId: string): Promise<SlashCommandInfo[]>

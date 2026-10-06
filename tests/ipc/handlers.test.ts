@@ -45,6 +45,8 @@ function setup() {
   const sent: { channel: string; payload: unknown }[] = []
   const setCaptureDir = vi.fn()
   const openPath = vi.fn(async () => '')
+  let persistedVf: Record<string, boolean> = { old: true }
+  const vfStore = { getVfGuilds: () => ({ ...persistedVf }), setVfGuilds: vi.fn((m: Record<string, boolean>) => void (persistedVf = { ...m })) }
   const api = registerHandlers({
     ipc,
     config,
@@ -56,10 +58,11 @@ function setup() {
     dataDir: dir,
     openPath,
     setCaptureDir,
-    captureDir: join(dir, 'captures')
+    captureDir: join(dir, 'captures'),
+    vfStore
   })
   const call = <T>(c: string, ...a: unknown[]) => handlers.get(c)!({}, ...a) as Promise<T>
-  return { config, client, engine, state, sent, call, api, setCaptureDir, openPath }
+  return { config, client, engine, state, sent, call, api, setCaptureDir, openPath, vfStore, getPersistedVf: () => persistedVf }
 }
 
 describe('registerHandlers', () => {
@@ -109,6 +112,26 @@ describe('registerHandlers', () => {
     expect(all).not.toContain(TOKEN)
     expect(all).not.toContain(ENC)
     expect(all).not.toContain('tokenEncrypted')
+  })
+
+  it('seeds the client VF cache from the store after login, and saves it after guilds.list', async () => {
+    const { call, client, vfStore, getPersistedVf } = setup()
+    await call('auth.setToken', TOKEN)
+    expect(client.vfCache).toEqual({ old: true })
+    client.guilds = [{ id: '10001', name: 'G', iconUrl: null, hasVirtualFisher: true }]
+    await call('guilds.list')
+    expect(client.listGuildsCalls.at(-1)).toEqual({ refresh: false })
+    expect(vfStore.setVfGuilds).toHaveBeenCalled()
+    expect(getPersistedVf()).toEqual({ old: true, '10001': true })
+  })
+
+  it('guilds.list({ refresh: true }) clears the persisted map and re-detects', async () => {
+    const { call, client, getPersistedVf } = setup()
+    await call('auth.setToken', TOKEN)
+    client.guilds = [{ id: '10001', name: 'G', iconUrl: null, hasVirtualFisher: false }]
+    await call('guilds.list', { refresh: true })
+    expect(client.listGuildsCalls.at(-1)).toEqual({ refresh: true })
+    expect(getPersistedVf()).toEqual({ '10001': false }) // 'old' is gone
   })
 
   it('target.set persists the target and restarts a running engine', async () => {

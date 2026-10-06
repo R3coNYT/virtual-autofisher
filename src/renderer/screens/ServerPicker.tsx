@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, Check, Hash, Loader2, Search } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Check, Hash, Loader2, RefreshCw, Search } from 'lucide-react'
 import type { ChannelInfo, GuildInfo } from '../../shared/types'
 import { Background } from '../components/Background'
 import { useStore } from '../store'
@@ -35,6 +35,7 @@ function ErrorBox({ message, onRetry }: { message: string; onRetry: () => void }
 
 export default function ServerPicker(): JSX.Element {
   const user = useStore((s) => s.user)
+  const hasTarget = useStore((s) => s.target !== null)
   const [guilds, setGuilds] = useState<GuildInfo[] | null>(null)
   const [guildError, setGuildError] = useState<string | null>(null)
   const [guild, setGuild] = useState<GuildInfo | null>(null)
@@ -46,16 +47,33 @@ export default function ServerPicker(): JSX.Element {
   const [saveError, setSaveError] = useState<string | null>(null)
   const channelReq = useRef(0)
 
-  const loadGuilds = (): void => {
+  const guildReq = useRef(0)
+
+  const loadGuilds = (refresh = false): void => {
+    const req = ++guildReq.current
     setGuildError(null)
     setGuilds(null)
     window.api.guilds
-      .list()
-      .then(setGuilds)
-      .catch((e) => setGuildError(cleanError(e)))
+      .list(refresh ? { refresh: true } : undefined)
+      .then((list) => req === guildReq.current && setGuilds(list))
+      .catch((e) => req === guildReq.current && setGuildError(cleanError(e)))
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(loadGuilds, [])
+  useEffect(() => loadGuilds(), [])
+
+  const toDashboard = (): void => useStore.getState().goto('dashboard')
+
+  // Esc: back to the channel list's servers, or to the dashboard when a target already exists
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      if (guild) back()
+      else if (hasTarget) toDashboard()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guild, hasTarget])
 
   const loadChannels = (g: GuildInfo): void => {
     const req = ++channelReq.current
@@ -121,10 +139,33 @@ export default function ServerPicker(): JSX.Element {
   return (
     <Background>
       <main className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 px-6 py-10">
+        {hasTarget && !guild && (
+          <button
+            type="button"
+            onClick={toDashboard}
+            className={`inline-flex items-center gap-2 self-start rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white ${focusRing}`}
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden /> Back
+          </button>
+        )}
         <header>
-          <h1 className="text-xl font-semibold tracking-tight text-white">
-            {guild ? 'Choose a channel' : 'Choose a server'}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-white">
+              {guild ? 'Choose a channel' : 'Choose a server'}
+            </h1>
+            {!guild && (
+              <button
+                type="button"
+                onClick={() => loadGuilds(true)}
+                disabled={!sortedGuilds && !guildError}
+                aria-label="Refresh"
+                title="Re-check which servers have Virtual Fisher"
+                className={`rounded-lg p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white disabled:opacity-60 ${focusRing}`}
+              >
+                <RefreshCw className={`h-4 w-4 ${!sortedGuilds && !guildError ? 'animate-spin text-accent' : ''}`} aria-hidden />
+              </button>
+            )}
+          </div>
           <p className="mt-1 text-sm text-slate-400">
             {guild
               ? `Commands will be sent to the chosen channel of ${guild.name}.`
@@ -134,10 +175,22 @@ export default function ServerPicker(): JSX.Element {
 
         {!guild && (
           <>
-            {guildError && <ErrorBox message={guildError} onRetry={loadGuilds} />}
+            {guildError && <ErrorBox message={guildError} onRetry={() => loadGuilds()} />}
             {!guildError && !sortedGuilds && (
-              <div className="flex items-center gap-2 text-sm text-slate-400" role="status">
-                <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden /> Loading servers…
+              <div className="flex flex-col gap-4" role="status">
+                <p className="text-sm text-slate-400">Checking which servers have Virtual Fisher… (first time can take a moment)</p>
+                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-hidden>
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <li
+                      key={i}
+                      className="flex h-[148px] animate-pulse flex-col items-center gap-3 rounded-2xl border border-white/5 bg-white/5 p-4"
+                    >
+                      <span className="h-14 w-14 rounded-2xl bg-white/10" />
+                      <span className="h-3 w-24 rounded bg-white/10" />
+                      <span className="h-3 w-16 rounded-full bg-white/10" />
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             {sortedGuilds && sortedGuilds.length === 0 && (

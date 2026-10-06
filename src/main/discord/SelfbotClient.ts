@@ -5,11 +5,12 @@ import type { BotMessage, ChannelInfo, GuildInfo, SelfUser, SlashCommandInfo } f
 import { maskSecrets } from '../util/maskSecrets'
 import type { Logger } from '../util/logger'
 import { LoginError, VIRTUAL_FISHER_ID, type DiscordClient, type DiscordEventMap, type SlashOptions } from './DiscordClient'
+import { detectVirtualFisher } from './detectVirtualFisher'
 import { orderSlashArgs } from './orderSlashArgs'
 import { toBotMessage, type LibMessageLike } from './toBotMessage'
 
 const LOGIN_TIMEOUT_MS = 20_000
-const MEMBER_FETCH_CONCURRENCY = 3
+const GUILD_CHECK_CONCURRENCY = 3
 
 /** Auth rejection (lib TOKEN_INVALID / HTTP 401) vs. anything else (transport, timeout). */
 export function classifyLoginError(e: unknown): LoginError {
@@ -200,8 +201,17 @@ export class SelfbotClient implements DiscordClient {
     return this.client
   }
 
-  async listGuilds(): Promise<GuildInfo[]> {
+  seedVfCache(map: Record<string, boolean>): void {
+    for (const [id, v] of Object.entries(map)) if (typeof v === 'boolean') this.vfByGuild.set(id, v)
+  }
+
+  getVfCache(): Record<string, boolean> {
+    return Object.fromEntries(this.vfByGuild)
+  }
+
+  async listGuilds(opts: { refresh?: boolean } = {}): Promise<GuildInfo[]> {
     const client = this.requireClient()
+    if (opts.refresh) this.vfByGuild.clear()
     const guilds = [...client.guilds.cache.values()]
     const result: GuildInfo[] = new Array(guilds.length)
     let next = 0
@@ -209,33 +219,15 @@ export class SelfbotClient implements DiscordClient {
       while (next < guilds.length) {
         const i = next++
         const g = guilds[i]
-        let has = this.vfByGuild.get(g.id)
-        if (has === undefined) {
-          try {
-            await g.members.fetch(VIRTUAL_FISHER_ID)
-            has = true
-            this.vfByGuild.set(g.id, true)
-          } catch (e) {
-            const err = e as { httpStatus?: number; code?: number }
-            if (err.httpStatus === 404 || err.code === 10007) {
-              has = false // definitive: Unknown Member
-              this.vfByGuild.set(g.id, false)
-            } else {
-              // transient or permission error (403, rate limit, network): fall back, do not cache a failure
-              try {
-                const idx = await this.fetchCommandIndex(g.id)
-                has = idx.applications.some((a) => a.id === VIRTUAL_FISHER_ID || a.bot_id === VIRTUAL_FISHER_ID)
-                if (has) this.vfByGuild.set(g.id, true)
-              } catch {
-                has = false
-              }
-            }
-          }
-        }
+        const has = await detectVirtualFisher(g.id, {
+          cache: this.vfByGuild,
+          inMemberCache: () => g.members.cache.has(VIRTUAL_FISHER_ID),
+          fetchIndex: () => this.fetchCommandIndex(g.id)
+        })
         result[i] = { id: g.id, name: g.name, iconUrl: g.iconURL(), hasVirtualFisher: has }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(MEMBER_FETCH_CONCURRENCY, guilds.length) }, worker))
+    await Promise.all(Array.from({ length: Math.min(GUILD_CHECK_CONCURRENCY, guilds.length) }, worker))
     return result.sort((a, b) => Number(b.hasVirtualFisher) - Number(a.hasVirtualFisher) || a.name.localeCompare(b.name))
   }
 

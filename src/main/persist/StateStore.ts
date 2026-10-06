@@ -10,6 +10,8 @@ export type PersistedState = {
   account: Partial<PersistedAccount>
   /** Epoch ms when the next /daily is available, null when unknown. */
   nextDailyAt: number | null
+  /** Virtual Fisher detection per guild id (not secret). Missing in old files: {}. */
+  vfGuilds: Record<string, boolean>
   savedAt: number
 }
 
@@ -42,6 +44,8 @@ const CHECKS: { [K in keyof PersistedAccount]: (v: unknown) => boolean } = {
 export class StateStore {
   private readonly file: string
   private readonly backup: string
+  private vf: Record<string, boolean> = {}
+  private vfLoaded = false
 
   constructor(
     private readonly dir: string,
@@ -75,16 +79,39 @@ export class StateStore {
       const v = parsed.account[k]
       if (v !== undefined && check(v)) account[k] = v
     }
+    const vfGuilds: Record<string, boolean> = {}
+    if (isObj(parsed.vfGuilds)) for (const [k, v] of Object.entries(parsed.vfGuilds)) if (typeof v === 'boolean') vfGuilds[k] = v
+    this.vf = vfGuilds
+    this.vfLoaded = true
     return {
       version: 1,
       account: account as Partial<PersistedAccount>,
       nextDailyAt: isNum(parsed.nextDailyAt) ? parsed.nextDailyAt : null,
+      vfGuilds,
       savedAt: isNum(parsed.savedAt) ? parsed.savedAt : 0
     }
   }
 
-  save(s: { account: PersistedAccount; nextDailyAt: number | null }): void {
-    const out: PersistedState = { version: 1, account: s.account, nextDailyAt: s.nextDailyAt, savedAt: this.now() }
+  save(s: { account: Partial<PersistedAccount>; nextDailyAt: number | null }): void {
+    if (!this.vfLoaded) this.load() // keep the persisted detection map when a game save comes first
+    this.write(s.account, s.nextDailyAt)
+  }
+
+  getVfGuilds(): Record<string, boolean> {
+    if (!this.vfLoaded) this.load()
+    return { ...this.vf }
+  }
+
+  /** Replaces the persisted Virtual Fisher detection map, keeping account and next daily as stored. */
+  setVfGuilds(map: Record<string, boolean>): void {
+    const cur = this.load() // also (re)reads the file; resets this.vf, overwritten below
+    this.vf = { ...map }
+    this.vfLoaded = true
+    this.write(cur?.account ?? {}, cur?.nextDailyAt ?? null)
+  }
+
+  private write(account: Partial<PersistedAccount>, nextDailyAt: number | null): void {
+    const out: PersistedState = { version: 1, account, nextDailyAt, vfGuilds: this.vf, savedAt: this.now() }
     mkdirSync(this.dir, { recursive: true })
     // atomic: a crash mid-write leaves at worst a stray state.json.tmp, never a truncated state.json
     const tmp = `${this.file}.tmp`
