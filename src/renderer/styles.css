@@ -12,3 +12,35 @@ body,
   font-family: Inter, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
+
+/* Scrollbars in the app's style: thin, no arrows, translucent thumb that turns cyan on hover.
+   (Only the ::-webkit-* pseudos: setting scrollbar-color would make Chromium ignore them.) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 197, 214, 0.18);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 211, 238, 0.55);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:active {
+  background: #22d3ee;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
