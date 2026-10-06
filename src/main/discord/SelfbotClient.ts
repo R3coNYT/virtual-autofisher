@@ -5,6 +5,7 @@ import type { BotMessage, ChannelInfo, GuildInfo, SelfUser, SlashCommandInfo } f
 import { maskSecrets } from '../util/maskSecrets'
 import type { Logger } from '../util/logger'
 import { VIRTUAL_FISHER_ID, type DiscordClient, type DiscordEventMap, type SlashOptions } from './DiscordClient'
+import { orderSlashArgs } from './orderSlashArgs'
 import { toBotMessage, type LibMessageLike } from './toBotMessage'
 
 const LOGIN_TIMEOUT_MS = 20_000
@@ -32,7 +33,8 @@ export type SelfbotClientOpts = { captureDir?: string; logger?: Logger }
  * Command listing: the lib has no public manager for it. Its own `sendSlash` uses
  * `TextBasedChannel#searchInteraction`, which GETs `guilds/{id}/application-command-index`
  * through `client.api`. We call that same REST route directly (per guild, not per channel)
- * and filter on VF's application id; `sendSlash(botId, name, ...args)` then resolves the
+ * and filter on VF's application id. Our per-guild cache serves getBotCommands/option ordering only;
+ * the lib's `sendSlash(botId, name, ...args)` re-fetches the index itself to resolve the
  * command itself, with positional args in option order.
  */
 export class SelfbotClient implements DiscordClient {
@@ -185,10 +187,23 @@ export class SelfbotClient implements DiscordClient {
           try {
             await g.members.fetch(VIRTUAL_FISHER_ID)
             has = true
-          } catch {
-            has = false
+            this.vfByGuild.set(g.id, true)
+          } catch (e) {
+            const err = e as { httpStatus?: number; code?: number }
+            if (err.httpStatus === 404 || err.code === 10007) {
+              has = false // definitive: Unknown Member
+              this.vfByGuild.set(g.id, false)
+            } else {
+              // transient or permission error (403, rate limit, network): fall back, do not cache a failure
+              try {
+                const idx = await this.fetchCommandIndex(g.id)
+                has = idx.applications.some((a) => a.id === VIRTUAL_FISHER_ID || a.bot_id === VIRTUAL_FISHER_ID)
+                if (has) this.vfByGuild.set(g.id, true)
+              } catch {
+                has = false
+              }
+            }
           }
-          this.vfByGuild.set(g.id, has)
         }
         result[i] = { id: g.id, name: g.name, iconUrl: g.iconURL(), hasVirtualFisher: has }
       }
@@ -213,9 +228,9 @@ export class SelfbotClient implements DiscordClient {
     return out.sort((a, b) => (a.parentName ?? '').localeCompare(b.parentName ?? '') || a.name.localeCompare(b.name))
   }
 
-  async getBotCommands(guildId: string): Promise<SlashCommandInfo[]> {
-    const cached = this.commandsByGuild.get(guildId)
-    if (cached) return cached
+  private async fetchCommandIndex(
+    guildId: string
+  ): Promise<{ application_commands: RawCommand[]; applications: { id: string; bot_id?: string }[] }> {
     const client = this.requireClient()
     // See class comment: same REST route the lib's searchInteraction uses.
     const api = (client as unknown as { api: RestApi }).api
@@ -223,11 +238,18 @@ export class SelfbotClient implements DiscordClient {
       application_commands?: RawCommand[]
       applications?: { id: string; bot_id?: string }[]
     }
+    return { application_commands: data.application_commands ?? [], applications: data.applications ?? [] }
+  }
+
+  async getBotCommands(guildId: string): Promise<SlashCommandInfo[]> {
+    const cached = this.commandsByGuild.get(guildId)
+    if (cached) return cached
+    const data = await this.fetchCommandIndex(guildId)
     const appIds = new Set(
-      (data.applications ?? []).filter((a) => a.id === VIRTUAL_FISHER_ID || a.bot_id === VIRTUAL_FISHER_ID).map((a) => a.id)
+      data.applications.filter((a) => a.id === VIRTUAL_FISHER_ID || a.bot_id === VIRTUAL_FISHER_ID).map((a) => a.id)
     )
     appIds.add(VIRTUAL_FISHER_ID)
-    const cmds: SlashCommandInfo[] = (data.application_commands ?? [])
+    const cmds: SlashCommandInfo[] = data.application_commands
       .filter((c) => appIds.has(c.application_id))
       .map((c) => ({
         name: c.name,
@@ -250,9 +272,8 @@ export class SelfbotClient implements DiscordClient {
     if (!channel || !channel.isText()) throw new Error('Salon introuvable')
     const guildId = 'guildId' in channel ? (channel.guildId as string | null) : null
     const info = guildId ? (await this.getBotCommands(guildId)).find((c) => c.name === command) : undefined
-    const ordered = info
-      ? info.options.filter((o) => options[o.name] !== undefined).map((o) => options[o.name])
-      : Object.values(options)
+    if (!info) throw new Error(`Commande introuvable : /${command}`)
+    const ordered = orderSlashArgs(info, options)
     await channel.sendSlash(VIRTUAL_FISHER_ID, command, ...ordered)
   }
 }

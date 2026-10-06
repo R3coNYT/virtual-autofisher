@@ -98,4 +98,13 @@ describe('toBotMessage', () => {
     })
     expect(toBotMessage(foreign, SELF)).toBeNull()
   })
+
+  it('rejects a bare self id in content without mention syntax', () => {
+    expect(toBotMessage(make({ content: `user ${SELF} fished` }), SELF)).toBeNull()
+  })
+
+  it('accepts another user interaction when we are mentioned, keeping their id', () => {
+    const r = toBotMessage(make({ interaction: { user: { id: OTHER } }, mentions: { users: [{ id: SELF }] } }), SELF)
+    expect(r?.interactionUserId).toBe(OTHER)
+  })
 })
