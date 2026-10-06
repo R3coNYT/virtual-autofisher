@@ -192,4 +192,15 @@ describe('GameState', () => {
       expect(s.log[0]).toMatchObject({ type: log[0], text: log[1] })
     } else expect(s.log).toHaveLength(0)
   })
+
+  it('a throwing patch listener neither breaks apply() nor skips the other listeners', () => {
+    const g = new GameState()
+    const other = vi.fn()
+    g.onPatch(() => {
+      throw new Error('boom')
+    })
+    g.onPatch(other)
+    expect(() => g.setNextFishAt(123)).not.toThrow()
+    expect(other).toHaveBeenCalledTimes(1)
+  })
 })

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ConnectionStatus, EventChannel, EventMap } from '../../shared/ipc'
-import type { Config, EngineState, SelfUser, SessionSummary } from '../../shared/types'
+import type { CaptchaPayload, ConnectionStatus, EngineStatus, EventChannel, EventMap } from '../../shared/ipc'
+import type { Config, EngineInfo, EngineState, SelfUser, SessionSummary } from '../../shared/types'
 import type { ConfigStore } from '../config/ConfigStore'
 import { LoginError, type DiscordClient } from '../discord/DiscordClient'
 import type { Engine } from '../engine/Engine'
@@ -46,6 +46,26 @@ const assertId = (v: unknown, what: string): void => {
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
 
+function captchaPayload(info: EngineInfo | undefined): CaptchaPayload {
+  const p: CaptchaPayload = { imageUrl: info?.captchaImageUrl, text: info?.captchaText ?? '' }
+  if (info?.captchaSolved) p.solved = true
+  return p
+}
+
+/** Spec §7: the user is told when the engine stops or pauses on its own. */
+function stateToast(s: EngineState, prev: EngineState, info: EngineInfo | undefined): EventMap['toast'] | null {
+  const reason = info?.reason
+  if (s === 'paused' && prev !== 'paused' && reason === 'noResponse') {
+    return { level: 'error', message: 'Virtual Fisher ne répond pas — pêche en pause' }
+  }
+  if (s === 'paused' && prev !== 'paused' && reason === 'exception') {
+    return { level: 'error', message: 'Erreur inattendue — pêche en pause' }
+  }
+  if (s === 'error') return { level: 'error', message: reason ? `Erreur : ${reason}` : 'Erreur du moteur' }
+  if (s === 'idle' && reason) return { level: 'info', message: `${reason} — pêche arrêtée` }
+  return null
+}
+
 export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void>; dispose(): void; startEngine(): Promise<void> } {
   const { ipc, config, client, engine, state, send, sessionsDir } = deps
   const logger = deps.logger ?? noopLogger
@@ -78,8 +98,10 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   let prev: EngineState = engine.state
   engine.onState((s, info) => {
     send('engine.state', info ? { state: s, info } : { state: s })
-    if (s === 'captcha') send('captcha.show', { imageUrl: info?.captchaImageUrl, text: info?.captchaText ?? '' })
+    if (s === 'captcha') send('captcha.show', captchaPayload(info))
     else if (prev === 'captcha') send('captcha.hide', undefined)
+    const toast = stateToast(s, prev, info)
+    if (toast) send('toast', toast)
     prev = s
   })
   state.onPatch((patch, newLog) => {
@@ -203,6 +225,11 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   handle('engine.resume', () => engine.resume())
   handle('engine.stop', () => engine.stop())
   handle('engine.commands', () => engine.availableCommands)
+  handle('engine.status', (): EngineStatus => {
+    const s = engine.state
+    const info = engine.stateInfo
+    return { state: s, info, captcha: s === 'captcha' ? captchaPayload(info) : null, snapshot: state.snapshot() }
+  })
   handle('command.send', (name: string, options?: Record<string, string | number>) => engine.sendManual(name, options))
   handle('captcha.submit', (answer: string) => engine.submitCaptcha(answer))
   handle('captcha.regen', () => engine.regenCaptcha())

@@ -90,6 +90,18 @@ describe('parseMessage fixtures', () => {
     expect(parseMessage({ ...load('cooldown'), content: 'wait 3s' }, NOW)).toEqual({ kind: 'cooldown', waitMs: 3000 })
   })
 
+  it('cooldown with multi-unit or "more" durations', () => {
+    const cd = (content: string) => parseMessage({ ...load('cooldown'), content, embeds: [] }, NOW)
+    expect(cd('You already claimed your daily, please wait 20h 12m before claiming again.')).toEqual({
+      kind: 'cooldown',
+      waitMs: (20 * 60 + 12) * 60_000
+    })
+    expect(cd('Please wait 5 more seconds')).toEqual({ kind: 'cooldown', waitMs: 5000 })
+    expect(cd('You must wait 1 hour, 3 minutes and 2 seconds')).toEqual({ kind: 'cooldown', waitMs: 3_782_000 })
+    expect(cd('wait 2 minutes 30 seconds before fishing 3 times')).toEqual({ kind: 'cooldown', waitMs: 150_000 })
+    expect(cd('Please wait 4 before fishing')).toEqual({ kind: 'cooldown', waitMs: 4000 })
+  })
+
   it('sell', () => {
     expect(parseMessage(load('sell'), NOW)).toEqual({ kind: 'sell', earned: 1234, xp: 56 })
   })

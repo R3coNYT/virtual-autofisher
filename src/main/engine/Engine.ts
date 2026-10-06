@@ -2,13 +2,16 @@ import type { DiscordClient } from '../discord/DiscordClient'
 import type { ConfigStore } from '../config/ConfigStore'
 import type { Logger } from '../util/logger'
 import { parseMessage } from '../parser'
-import type { BotMessage, EngineState, GameEvent, PauseReason, SessionSummary, SlashCommandInfo } from '../../shared/types'
+import { buildText } from '../parser/text'
+import type { BotMessage, EngineInfo, EngineState, GameEvent, PauseReason, SessionSummary, SlashCommandInfo } from '../../shared/types'
 import { CommandQueue, type QueuedCommand } from './CommandQueue'
+import { EditDeduper } from './EditDeduper'
 import type { GameState } from './GameState'
 import { Scheduler } from './Scheduler'
 import { CaptchaFlow } from './captchaFlow'
+import { randomBetweenMs } from './humanize'
 
-export type EngineInfo = { reason?: string; captchaImageUrl?: string; captchaText?: string }
+export type { EngineInfo }
 type StateCb = (s: EngineState, info?: EngineInfo) => void
 type Target = { guildId: string; channelId: string }
 
@@ -27,6 +30,8 @@ const RATE_LIMIT_FACTOR = 1.5
 const RATE_LIMIT_WINDOW_MS = 5 * 60_000
 const NO_FUNDS_BLOCK_MS = 30 * 60_000
 const SESSION_CHECK_MS = 15_000
+/** A non-fish command answered by "wait N" is re-sent once after N when N is at most this long. */
+const DEFER_MAX_MS = 10 * 60_000
 const ACTIVE: EngineState[] = ['running', 'paused', 'resting']
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
@@ -38,6 +43,7 @@ const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
  */
 export class Engine {
   private current: EngineState = 'idle'
+  private currentInfo: EngineInfo = {}
   private pauseReason: PauseReason | null = null
   private commands: SlashCommandInfo[] = []
   private target: Target | null = null
@@ -55,6 +61,12 @@ export class Engine {
   private awaiting: QueuedCommand | null = null
   /** Copies pushed by retryOnce: they are not retried again. */
   private retries = new WeakSet<QueuedCommand>()
+  /** Copies re-sent after a "wait N" reply: a second cooldown is not deferred again. */
+  private deferred = new WeakSet<QueuedCommand>()
+  /** Last command handed to Discord (answered or not). */
+  private lastSent: QueuedCommand | null = null
+  private readonly edits = new EditDeduper()
+  private readonly rand: () => number
   private lastMaintenanceKey: string | undefined
   private failures = 0
   private rateLimitUntil = -Infinity
@@ -69,6 +81,7 @@ export class Engine {
     this.logger = deps.logger ?? noopLogger
     this.getConfig = () => deps.config.get()
     const rand = deps.rand ?? Math.random
+    this.rand = rand
 
     this.queue = new CommandQueue((c) => this.send(c), {
       minGapMs: () =>
@@ -93,6 +106,7 @@ export class Engine {
       logger: this.logger,
       commands: () => this.commands,
       getState: () => this.current,
+      pauseReason: () => this.pauseReason,
       setState: (s, info) => this.setState(s, info),
       activate: () => this.activate(),
       guard: (fn) => this.guard(fn)
@@ -106,6 +120,11 @@ export class Engine {
 
   get state(): EngineState {
     return this.current
+  }
+
+  /** Detail of the current state (reason, captcha), as last emitted. */
+  get stateInfo(): EngineInfo {
+    return { ...this.currentInfo }
   }
 
   get availableCommands(): SlashCommandInfo[] {
@@ -175,6 +194,11 @@ export class Engine {
   }
 
   pause(reason: PauseReason = 'user'): void {
+    if (this.current === 'captcha') {
+      // lost connection during a captcha: once solved, wait for the reconnect instead of fishing
+      if (reason === 'network' && !this.pauseReason) this.pauseReason = 'network'
+      return
+    }
     if (this.current === 'paused') {
       if (reason === 'user' && this.pauseReason !== 'user') {
         this.pauseReason = 'user' // a user pause must not be lifted by a reconnect
@@ -221,6 +245,15 @@ export class Engine {
 
   private onBotMessage(m: BotMessage): void {
     if (this.current === 'idle') return
+    const ev = parseMessage(m, Date.now())
+    let text = ''
+    try {
+      text = buildText(m)
+    } catch {
+      /* compared as empty */
+    }
+    // an edit that changes nothing, or would count a catch/sell/purchase/daily twice, is dropped
+    if (!this.edits.accept(m.id, m.isEdit, ev, text)) return
     // Only non-edit messages answer the in-flight command. Known limitation: a late reply
     // to a command that already timed out can release the next command early.
     const replyTo = m.isEdit ? null : this.awaiting
@@ -228,7 +261,7 @@ export class Engine {
       this.awaiting = null
       this.failures = 0
     }
-    this.guard(() => this.route(parseMessage(m, Date.now()), replyTo))
+    this.guard(() => this.route(ev, replyTo))
     // Settled after routing: a captcha replying to it has already scheduled its re-request.
     if (replyTo) this.guard(() => this.scheduler.onSettled(replyTo))
     // Notified last: a captcha must have paused the queue before it can pump again.
@@ -241,10 +274,35 @@ export class Engine {
     // In captcha (and idle/connecting/error) nothing may trigger a command.
     if (!ACTIVE.includes(this.current)) return
     if (ev.kind === 'error' && /enough/i.test(ev.text)) this.onNoFunds(replyTo)
-    this.scheduler.onEvent(ev)
+    if (ev.kind === 'cooldown') this.onCooldown(ev.waitMs, replyTo)
+    else this.scheduler.onEvent(ev)
     if (replyTo?.name === 'fish' && ev.kind !== 'catch' && ev.kind !== 'cooldown') this.scheduler.retryFish()
     // /boosts answered by something else: arm the buffs without endsAt rather than never
     if (replyTo?.key === 'boosts' && ev.kind !== 'boosts') this.scheduler.onCommandFailed(replyTo)
+  }
+
+  /**
+   * "Wait N": a fish cooldown only when it answers a /fish (or nothing, right after a /fish).
+   * Any other command is re-sent once after N (N ≤ 10 min), else its slot is re-armed past N.
+   */
+  private onCooldown(waitMs: number, replyTo: QueuedCommand | null): void {
+    if (replyTo?.name === 'fish' || (!replyTo && this.lastSent?.name === 'fish')) {
+      return this.scheduler.onEvent({ kind: 'cooldown', waitMs })
+    }
+    if (!replyTo || replyTo.priority === 'verify') return
+    const wait = formatWait(waitMs)
+    if (waitMs <= DEFER_MAX_MS && !this.deferred.has(replyTo)) {
+      const again: QueuedCommand = { ...replyTo }
+      this.deferred.add(again)
+      this.scheduler.deferCommand(again, waitMs + randomBetweenMs(0.2, 1, this.rand))
+      return this.logger.info(`/${replyTo.name} en recharge : renvoyée dans ${wait}`)
+    }
+    const delay = waitMs + randomBetweenMs(60, 300, this.rand)
+    if (this.scheduler.rearm(replyTo.key, delay)) {
+      this.logger.info(`/${replyTo.name} en recharge (${wait}) : reprogrammée dans ${formatWait(delay)}`)
+    } else {
+      this.logger.info(`/${replyTo.name} en recharge (${wait}) : non renvoyée`)
+    }
   }
 
   private onNoFunds(replyTo: QueuedCommand | null): void {
@@ -293,6 +351,7 @@ export class Engine {
 
   private onReconnected(): void {
     this.clearNetworkTimer()
+    if (this.current === 'captcha' && this.pauseReason === 'network') this.pauseReason = null
     if (this.current === 'paused' && this.pauseReason === 'network') this.resume()
   }
 
@@ -316,6 +375,7 @@ export class Engine {
     const target = this.target
     if (!target) throw new Error('Aucun salon actif')
     this.awaiting = c
+    this.lastSent = c
     if (c.priority === 'maintenance') this.lastMaintenanceKey = c.key
     this.gameState.markCommandSent(c.name)
     const opts = c.options && Object.keys(c.options).length ? c.options : undefined
@@ -350,6 +410,7 @@ export class Engine {
     this.queue.pause()
     this.queue.notifyResponse() // drop the wait on an in-flight command of the old target
     this.awaiting = null
+    this.lastSent = null
     this.pauseReason = null
     this.clearNetworkTimer()
     if (this.sessionTimer) clearInterval(this.sessionTimer)
@@ -381,6 +442,7 @@ export class Engine {
 
   private setState(s: EngineState, info: EngineInfo = {}): void {
     this.current = s
+    this.currentInfo = { ...info }
     for (const cb of [...this.listeners]) {
       try {
         cb(s, info)
@@ -406,4 +468,11 @@ export class Engine {
       this.logger.error('Mise en pause impossible', e)
     }
   }
+}
+
+function formatWait(ms: number): string {
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s} s`
+  const m = Math.round(s / 60)
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`
 }

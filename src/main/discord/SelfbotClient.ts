@@ -60,6 +60,8 @@ export class SelfbotClient implements DiscordClient {
   }
   private readonly vfByGuild = new Map<string, boolean>()
   private readonly commandsByGuild = new Map<string, SlashCommandInfo[]>()
+  /** Last slash command handed to the library, to give context to its unhandled rejections. */
+  lastSlash: { command: string; at: number } | null = null
 
   constructor(private readonly opts: SelfbotClientOpts = {}) {}
 
@@ -297,6 +299,19 @@ export class SelfbotClient implements DiscordClient {
     const info = guildId ? (await this.getBotCommands(guildId)).find((c) => c.name === command) : undefined
     if (!info) throw new Error(`Commande introuvable : /${command}`)
     const ordered = orderSlashArgs(info, options)
-    await channel.sendSlash(VIRTUAL_FISHER_ID, command, ...ordered)
+    this.lastSlash = { command, at: Date.now() }
+    try {
+      await channel.sendSlash(VIRTUAL_FISHER_ID, command, ...ordered)
+    } catch (e) {
+      // The lib gives up after 5 s when it cannot match the reply to its nonce, although the
+      // command went out: the queue's 8 s timeout and the actual bot reply decide instead.
+      if (isInteractionTimeout(e)) return
+      throw e
+    }
   }
+}
+
+/** The library's own 5 s "No response from application" rejection (DiscordError INTERACTION_FAILED). */
+export function isInteractionTimeout(e: unknown): boolean {
+  return (e as { code?: unknown } | null)?.code === 'INTERACTION_FAILED'
 }

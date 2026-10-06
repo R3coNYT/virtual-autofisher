@@ -165,6 +165,22 @@ export class Scheduler {
     this.pending.clear()
   }
 
+  /** A command answered by a short "wait N": pushed again after `ms` (timer frozen like the others). */
+  deferCommand(c: QueuedCommand, ms: number): void {
+    if (this.running) this.set(`defer-${c.key ?? c.name}`, ms, () => this.push(c))
+  }
+
+  /**
+   * A maintenance command answered by a long "wait N" (e.g. daily): its periodic timer
+   * (daily, quests, profile, sell, buff-*) fires next in `ms`. False when it has none.
+   */
+  rearm(key: string | undefined, ms: number): boolean {
+    const slot = key === undefined ? undefined : this.slots.get(key)
+    if (!this.running || !slot || key === undefined) return false
+    this.set(key, ms, slot.fn, slot.kind)
+    return true
+  }
+
   /** Not enough money: stop buying this kind of item for `ms`. */
   blockPurchases(what: 'buff' | 'bait', ms: number): void {
     this.buyBlockedUntil[what] = Date.now() + ms

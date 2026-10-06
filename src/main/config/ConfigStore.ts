@@ -100,7 +100,10 @@ export class ConfigStore {
 
   private commit(): Config {
     mkdirSync(this.dir, { recursive: true })
-    writeFileSync(this.file, JSON.stringify(this.config, null, 2), 'utf8')
+    // atomic: a crash mid-write leaves at worst a stray config.json.tmp, never a truncated config.json
+    const tmp = `${this.file}.tmp`
+    writeFileSync(tmp, JSON.stringify(this.config, null, 2), 'utf8')
+    renameSync(tmp, this.file)
     const snap = this.get()
     for (const cb of this.listeners) cb(snap)
     return snap

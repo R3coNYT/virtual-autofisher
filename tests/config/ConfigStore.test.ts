@@ -69,6 +69,20 @@ describe('ConfigStore', () => {
     expect(readFileSync(join(dir, 'config.bak.json'), 'utf8')).toBe('{not json')
     expect(existsSync(join(dir, 'config.bak.json'))).toBe(true)
   })
+  it('écriture atomique : un config.json.tmp résiduel ne gêne ni le chargement ni la sauvegarde', () => {
+    const dir = tmp()
+    const s = new ConfigStore(dir, fakeCipher())
+    s.load()
+    s.update({ sessionLimitH: 3 })
+    expect(existsSync(join(dir, 'config.json.tmp'))).toBe(false)
+    writeFileSync(join(dir, 'config.json.tmp'), '{interrompu') // crash au milieu d'une écriture
+    const s2 = new ConfigStore(dir, fakeCipher())
+    expect(s2.load().sessionLimitH).toBe(3)
+    expect(existsSync(join(dir, 'config.bak.json'))).toBe(false)
+    s2.update({ sessionLimitH: 4 })
+    expect(JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')).sessionLimitH).toBe(4)
+    expect(existsSync(join(dir, 'config.json.tmp'))).toBe(false)
+  })
   it('onChange notifie et se désabonne', () => {
     const s = new ConfigStore(tmp(), fakeCipher())
     s.load()

@@ -1,4 +1,4 @@
-import type { EngineState, GameEvent, SlashCommandInfo } from '../../shared/types'
+import type { EngineInfo, EngineState, GameEvent, PauseReason, SlashCommandInfo } from '../../shared/types'
 import type { Logger } from '../util/logger'
 import type { CommandQueue } from './CommandQueue'
 import type { GameState } from './GameState'
@@ -6,7 +6,9 @@ import type { Scheduler } from './Scheduler'
 import { positionalOptions } from './Scheduler'
 import { randomBetweenMs } from './humanize'
 
-type Info = { captchaImageUrl?: string; captchaText?: string }
+type Info = Pick<EngineInfo, 'captchaImageUrl' | 'captchaText' | 'captchaSolved'>
+
+export const CAPTCHA_SOLVED_TEXT = 'Captcha résolu — reprise dans quelques secondes…'
 
 export type CaptchaDeps = {
   queue: CommandQueue
@@ -16,7 +18,9 @@ export type CaptchaDeps = {
   logger: Logger
   commands: () => SlashCommandInfo[]
   getState: () => EngineState
-  setState: (s: EngineState, info?: Info) => void
+  /** Non-null when the engine must go back to paused after the captcha (user pause, network). */
+  pauseReason: () => PauseReason | null
+  setState: (s: EngineState, info?: EngineInfo) => void
   /** Leaves the captcha (scheduler already thawed): running or resting, queue resumed accordingly. */
   activate: () => void
   guard: (fn: () => void) => void
@@ -44,13 +48,17 @@ export class CaptchaFlow {
         return true
       case 'captchaSolved':
         this.d.gameState.apply(ev)
-        if (this.d.getState() === 'captcha') this.scheduleResume()
+        if (this.d.getState() === 'captcha') {
+          this.scheduleResume()
+          this.info = { ...this.info, captchaText: CAPTCHA_SOLVED_TEXT, captchaSolved: true }
+          this.d.setState('captcha', { ...this.info })
+        }
         return true
       case 'captchaFailed':
         this.d.gameState.apply(ev)
         if (this.d.getState() === 'captcha') {
           this.cancelResume()
-          this.info = { ...this.info, captchaText: ev.text }
+          this.info = { captchaImageUrl: this.info.captchaImageUrl, captchaText: ev.text }
           this.d.setState('captcha', { ...this.info })
         }
         return true
@@ -92,7 +100,7 @@ export class CaptchaFlow {
   }
 
   private pushVerify(answer: string): void {
-    if (this.d.getState() !== 'captcha') return
+    if (this.d.getState() !== 'captcha' || this.info.captchaSolved) return
     const verify = this.d.commands().find((c) => c.name === 'verify')
     if (!verify) return this.d.logger.warn('Commande /verify introuvable dans ce serveur')
     this.d.queue.push({ name: 'verify', options: positionalOptions(verify, [answer]), priority: 'verify', key: 'verify' })
@@ -106,6 +114,9 @@ export class CaptchaFlow {
           this.resumeTimer = null
           if (this.d.getState() !== 'captcha') return
           this.info = {}
+          const reason = this.d.pauseReason()
+          // paused before (or, for the network, during) the captcha: stay paused, scheduler frozen
+          if (reason) return this.d.setState('paused', { reason })
           this.d.scheduler.thaw()
           this.d.activate()
         }),

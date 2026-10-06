@@ -192,7 +192,13 @@ export class GameState {
     if (added.length) this.log = [...this.log, ...added].slice(-LOG_CAP)
     const patch = diff(before, this.body)
     if (Object.keys(patch).length === 0 && added.length === 0) return
-    for (const cb of [...this.listeners]) cb(patch as DeepPartial<GameSnapshot>, added.map((l) => ({ ...l })))
+    for (const cb of [...this.listeners]) {
+      try {
+        cb(patch as DeepPartial<GameSnapshot>, added.map((l) => ({ ...l })))
+      } catch {
+        // a failing listener (UI relay, notification) must neither skip the others nor reach the engine
+      }
+    }
   }
 }
 

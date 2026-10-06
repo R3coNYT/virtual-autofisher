@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
 import { join } from 'path'
 import { ConfigStore } from './config/ConfigStore'
 import { safeStorageCipher } from './config/safeStorageCipher'
@@ -13,11 +13,25 @@ import { createLogger } from './util/logger'
 import type { EngineState, RareCounts } from '../shared/types'
 
 const logger = createLogger(join(app.getPath('userData'), 'logs'))
+let client: SelfbotClient | null = null
 process.on('uncaughtException', (e) => logger.error('uncaughtException', e))
-process.on('unhandledRejection', (e) => logger.error('unhandledRejection', e))
+process.on('unhandledRejection', (e) => {
+  // the library posts interactions without awaiting them: name the slash command that was just sent
+  const last = client?.lastSlash
+  const ctx = last && Date.now() - last.at < 30_000 ? ` (après /${last.command})` : ''
+  logger.error(`unhandledRejection${ctx}`, e)
+})
 
 let current: BrowserWindow | null = null
 let quitting = false
+
+/** Brings the existing window to the front (tray, second launch). */
+function showCurrent(): void {
+  if (!current || current.isDestroyed()) return
+  if (current.isMinimized()) current.restore()
+  current.show()
+  current.focus()
+}
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -62,9 +76,11 @@ function boot(): void {
   const userData = app.getPath('userData')
   const config = new ConfigStore(userData, safeStorageCipher, logger)
   config.load()
-  const client = new SelfbotClient({ logger })
+  if (!process.env['ELECTRON_RENDERER_URL']) Menu.setApplicationMenu(null) // keep the default (devtools) menu in dev
+  const discord = new SelfbotClient({ logger })
+  client = discord
   const state = new GameState()
-  const engine = new Engine({ client, config, state, logger })
+  const engine = new Engine({ client: discord, config, state, logger })
 
   let win = createWindow()
   const send = (channel: string, payload: unknown): void => {
@@ -73,14 +89,14 @@ function boot(): void {
   const { autoLogin, dispose, startEngine } = registerHandlers({
     ipc: ipcMain,
     config,
-    client,
+    client: discord,
     engine,
     state,
     send,
     sessionsDir: join(userData, 'sessions'),
     dataDir: userData,
     openPath: (p) => shell.openPath(p),
-    setCaptureDir: (dir) => client.setCaptureDir(dir),
+    setCaptureDir: (dir) => discord.setCaptureDir(dir),
     captureDir: join(userData, 'captures'),
     logger
   })
@@ -112,13 +128,17 @@ function boot(): void {
   })
   let lastRare: RareCounts = { gold: 0, emerald: 0, lava: 0, diamond: 0 }
   state.onPatch((patch, newLog) => {
-    if (win.isDestroyed()) return
-    const level = levelUpFromLog(newLog)
-    if (level !== null) notifyLevelUp(win, config.get().notifications, level)
-    const rare = patch.session?.rareCaught
-    if (rare) {
-      notifyRareFish(win, config.get().notifications, rareIncreases(lastRare, rare))
-      lastRare = { ...lastRare, ...rare }
+    try {
+      if (win.isDestroyed()) return
+      const level = levelUpFromLog(newLog)
+      if (level !== null) notifyLevelUp(win, config.get().notifications, level)
+      const rare = patch.session?.rareCaught
+      if (rare) {
+        notifyRareFish(win, config.get().notifications, rareIncreases(lastRare, rare))
+        lastRare = { ...lastRare, ...rare }
+      }
+    } catch (e) {
+      logger.error('Notification impossible', e) // must never reach (and pause) the engine
     }
   })
 
@@ -132,7 +152,7 @@ function boot(): void {
       logger.error('engine.stop on quit failed', e)
     }
     tray.destroy() // after engine.stop(): its state change still refreshes a live tray
-    void client.logout().catch(() => {})
+    void discord.logout().catch(() => {})
   })
 
   app.on('activate', () => {
@@ -141,7 +161,12 @@ function boot(): void {
   })
 }
 
-app.whenReady().then(boot).catch((e) => logger.error('boot failed', e))
+if (!app.requestSingleInstanceLock()) {
+  app.quit() // another instance runs (it is brought to the front by 'second-instance')
+} else {
+  app.on('second-instance', showCurrent)
+  app.whenReady().then(boot).catch((e) => logger.error('boot failed', e))
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

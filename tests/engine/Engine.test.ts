@@ -624,3 +624,176 @@ describe('Engine', () => {
     expect(names()).toEqual(['fish', 'profile'])
   })
 })
+
+/** Makes the fake bot answer every command right after it is sent (null = no answer). */
+function autoReply(client: FakeDiscordClient, reply: (cmd: string) => Partial<BotMessage> | null) {
+  const orig = client.sendSlash.bind(client)
+  client.sendSlash = async (channelId, command, options) => {
+    await orig(channelId, command, options)
+    queueMicrotask(() => {
+      const r = reply(command)
+      if (r) client.emitBot(r)
+    })
+  }
+}
+
+describe('Engine: cooldown replies', () => {
+  it('a daily answered "please wait 20h 12m" leaves fishing alone and re-arms the daily ~20 h later', async () => {
+    const { client, engine, cfg, names, logger } = setup((c) => {
+      c.daily.enabled = true
+    })
+    autoReply(client, (cmd) =>
+      cmd === 'daily' ? { content: 'You already claimed your daily reward, please wait 20h 12m.' } : oneFish
+    )
+    const dailies = () => names().filter((n) => n === 'daily').length
+    await engine.start(A)
+    await tick(60_000)
+    expect(dailies()).toBe(1)
+    // fishing kept its normal pace (≈ every 3 s), it was not pushed back by the daily's cooldown
+    expect(names().filter((n) => n === 'fish').length).toBeGreaterThanOrEqual(15)
+    expect(engine.state).toBe('running')
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('/daily en recharge'))
+
+    cfg.fishing.baseCooldownSec = 600 // fewer fish over the next 20 h
+    const rearmAt = 2_500 + (20 * 60 + 12) * 60_000 + 180_000 // daily sent at 2.5 s; + wait + 3 min (rand 0.5 of 1–5)
+    await tick(rearmAt - 60_000 - 30_000)
+    expect(dailies()).toBe(1)
+    await tick(60_000)
+    expect(dailies()).toBe(2)
+  })
+
+  it('a short "wait" in reply to a maintenance command re-sends it once after the wait, then re-arms its slot', async () => {
+    const { client, engine, names } = setup((c) => {
+      c.quests.enabled = true
+    })
+    let questReplies = 0
+    autoReply(client, (cmd) => (cmd === 'quests' ? (questReplies++ < 2 ? { content: 'Please wait 30 more seconds' } : { content: 'ok' }) : oneFish))
+    const quests = () => names().filter((n) => n === 'quests').length
+    await engine.start(A)
+    await tick(5_000)
+    expect(quests()).toBe(1)
+    await tick(25_000) // 30 s + 0.6 s after the reply at 2.5 s → not yet
+    expect(quests()).toBe(1)
+    await tick(10_000)
+    expect(quests()).toBe(2) // ≈ 33.1 s
+    // the copy got "wait 30" again: not deferred a second time, the quests slot is re-armed 30 s + 3 min later
+    await tick(200_000 - 40_000)
+    expect(quests()).toBe(2)
+    await tick(60_000)
+    expect(quests()).toBe(3)
+  })
+
+  it('a fish cooldown with no reply target right after a /fish still reschedules the fish', async () => {
+    const { client, engine, names } = setup()
+    await engine.start(A)
+    client.emitBot(oneFish) // answers the first /fish
+    await tick(FISH_DELAY + 10)
+    expect(names()).toEqual(['fish', 'fish'])
+    client.emitBot(oneFish) // answers the second: next fish in ≈ 3 s…
+    client.emitBot({ ...cooldown(20), isEdit: true }) // …until the reply is edited into a cooldown (no reply target)
+    await tick(19_000)
+    expect(names()).toEqual(['fish', 'fish'])
+    await tick(2_000)
+    expect(names()).toEqual(['fish', 'fish', 'fish'])
+  })
+})
+
+describe('Engine: message edits', () => {
+  it('an edited catch with the same (or changed) text is not counted twice', async () => {
+    const { client, engine, state } = setup()
+    await engine.start(A)
+    client.emitBot({ ...CATCH, id: 'x1' })
+    expect(state.snapshot().session.catches).toBe(3)
+    client.emitBot({ ...CATCH, id: 'x1', isEdit: true })
+    expect(state.snapshot().session.catches).toBe(3)
+    client.emitBot({ ...oneFish, id: 'x1', isEdit: true }) // changed text, still a catch
+    expect(state.snapshot().session.catches).toBe(3)
+    expect(state.snapshot().log.filter((l) => l.type === 'catch')).toHaveLength(1)
+  })
+
+  it('an edit of an already solved captcha message does not re-enter the captcha', async () => {
+    const { client, engine } = setup()
+    await engine.start(A)
+    client.emitBot({ ...CAPTCHA, id: 'cap1' })
+    client.emitBot(SOLVED)
+    await tick(15_000)
+    expect(engine.state).toBe('running')
+    client.emitBot({ ...CAPTCHA, id: 'cap1', isEdit: true }) // same text
+    client.emitBot({ ...CAPTCHA, id: 'cap1', isEdit: true, embeds: [{ title: 'Captcha', description: 'Use /verify (expired)', fields: [] }] })
+    expect(engine.state).toBe('running')
+  })
+
+  it('a captcha arriving as an edit of the /fish reply still enters the captcha', async () => {
+    const { client, engine, state } = setup()
+    await engine.start(A)
+    client.emitBot({ ...oneFish, id: 'f1' })
+    client.emitBot({ ...CAPTCHA, id: 'f1', isEdit: true })
+    expect(engine.state).toBe('captcha')
+    expect(state.snapshot().session.captchas).toBe(1)
+  })
+})
+
+describe('Engine: leaving a captcha', () => {
+  it('a captcha while user-paused goes back to paused (user) once solved, not running', async () => {
+    const { client, engine, states, names } = setup()
+    await engine.start(A)
+    engine.pause()
+    client.emitBot(CAPTCHA)
+    expect(engine.state).toBe('captcha')
+    client.emitBot(SOLVED)
+    await tick(15_000)
+    expect(engine.state).toBe('paused')
+    expect(states.at(-1)?.info?.reason).toBe('user')
+    await tick(60_000)
+    expect(names()).toEqual(['fish'])
+    engine.resume()
+    expect(engine.state).toBe('running')
+    await tick(FISH_DELAY + 100)
+    expect(names()).toEqual(['fish', 'fish'])
+  })
+
+  it('network-paused → paused (network) after the captcha; a reconnect during the captcha → running', async () => {
+    const a = setup()
+    await a.engine.start(A)
+    a.client.emitDisconnect()
+    a.client.emitBot(CAPTCHA)
+    a.client.emitBot(SOLVED)
+    await tick(15_000)
+    expect(a.engine.state).toBe('paused')
+    expect(a.states.at(-1)?.info?.reason).toBe('network')
+    a.client.emitReconnect()
+    expect(a.engine.state).toBe('running')
+
+    const b = setup()
+    await b.engine.start(A)
+    b.client.emitBot(CAPTCHA)
+    b.client.emitDisconnect()
+    b.client.emitReconnect()
+    b.client.emitBot(SOLVED)
+    await tick(15_000)
+    expect(b.engine.state).toBe('running')
+  })
+
+  it('the solved answer is reported in the captcha state; verify is refused afterwards', async () => {
+    const { client, engine, states, names } = setup()
+    await engine.start(A)
+    client.emitBot(CAPTCHA)
+    client.emitBot(SOLVED)
+    expect(engine.state).toBe('captcha')
+    expect(states.at(-1)?.info).toMatchObject({ captchaSolved: true, captchaText: expect.stringMatching(/résolu/) })
+    expect(engine.stateInfo.captchaSolved).toBe(true)
+    engine.submitCaptcha('again')
+    await tick(3_000)
+    expect(names()).not.toContain('verify')
+  })
+
+  it('stop during a captcha → idle, nothing sent', async () => {
+    const { client, engine, names } = setup()
+    await engine.start(A)
+    client.emitBot(CAPTCHA)
+    engine.stop()
+    expect(engine.state).toBe('idle')
+    await tick(60_000)
+    expect(names()).toEqual(['fish'])
+  })
+})

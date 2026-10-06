@@ -22,12 +22,29 @@ export type LibMessageLike = {
   interaction?: { user: IdLike } | null
   interactionMetadata?: { user: IdLike } | null
   mentions: { users: Iter<IdLike> | Map<string, IdLike> }
+  /** Collection (Map-like) of attachments; a captcha image may come as a file instead of an embed image. */
+  attachments?: Iter<AttachmentLike> | Map<string, AttachmentLike> | null
 }
+
+type AttachmentLike = { url?: string | null; contentType?: string | null; name?: string | null }
 
 const EPHEMERAL = 64
 
 function flagBits(flags: LibMessageLike['flags']): number {
   return typeof flags === 'number' ? flags : (flags?.bitfield ?? 0)
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif)(?:$|\?)/i
+
+/** URL of the first image attachment, if any. */
+function firstImageAttachment(msg: LibMessageLike): string | undefined {
+  const a = msg.attachments
+  if (!a) return undefined
+  const list = Array.isArray(a) ? a : Array.from(a.values())
+  const img = list.find(
+    (x) => !!x?.url && (/^image\//i.test(x.contentType ?? '') || IMAGE_EXT.test(x.name ?? '') || IMAGE_EXT.test(x.url))
+  )
+  return img?.url ?? undefined
 }
 
 function mentionsUser(msg: LibMessageLike, selfId: string): boolean {
@@ -63,6 +80,13 @@ export function toBotMessage(msg: LibMessageLike, selfId: string, isEdit = false
     })),
     ephemeral,
     isEdit
+  }
+  if (!out.embeds.some((e) => e.imageUrl)) {
+    const url = firstImageAttachment(msg)
+    if (url) {
+      if (out.embeds.length) out.embeds[0].imageUrl = url
+      else out.embeds.push({ fields: [], imageUrl: url }) // synthetic embed carrying the image only
+    }
   }
   if (interactionUserId !== undefined) out.interactionUserId = interactionUserId
   return out

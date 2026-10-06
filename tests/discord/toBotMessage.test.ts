@@ -107,4 +107,23 @@ describe('toBotMessage', () => {
     const r = toBotMessage(make({ interaction: { user: { id: OTHER } }, mentions: { users: [{ id: SELF }] } }), SELF)
     expect(r?.interactionUserId).toBe(OTHER)
   })
+
+  it('uses the first image attachment as imageUrl when no embed has an image', () => {
+    const png = { url: 'https://cdn.example.test/a/captcha.png', contentType: 'image/png', name: 'captcha.png' }
+    const txt = { url: 'https://cdn.example.test/a/notes.txt', contentType: 'text/plain', name: 'notes.txt' }
+    const ours = { interaction: { user: { id: SELF } } }
+    // embed without image: the attachment fills the first embed
+    const a = toBotMessage(
+      make({ ...ours, embeds: [{ title: 'Captcha', description: 'Use /verify' }], attachments: new Map([['1', txt], ['2', png]]) }),
+      SELF
+    )
+    expect(a?.embeds[0].imageUrl).toBe(png.url)
+    // no embed at all: a synthetic one carries the image
+    const b = toBotMessage(make({ ...ours, content: 'captcha', attachments: [{ url: 'https://x.test/c.webp?ex=1' }] }), SELF)
+    expect(b?.embeds).toEqual([{ fields: [], imageUrl: 'https://x.test/c.webp?ex=1' }])
+    // an embed image wins; non-image attachments are ignored
+    const c = toBotMessage(make({ ...ours, embeds: [{ image: { url: 'http://img/e.png' } }], attachments: [png] }), SELF)
+    expect(c?.embeds[0].imageUrl).toBe('http://img/e.png')
+    expect(toBotMessage(make({ ...ours, attachments: [txt] }), SELF)?.embeds).toEqual([])
+  })
 })
