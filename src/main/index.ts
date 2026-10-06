@@ -31,6 +31,16 @@ function createWindow(): BrowserWindow {
   win.once('ready-to-show', () => win.show())
 
   if (process.env['ELECTRON_RENDERER_URL']) {
+    // dev only: surface renderer warnings/errors (e.g. CSP violations) in app.log
+    win.webContents.on('console-message', (event) => {
+      // Electron >= 35 passes a details object; level: 'info' | 'warning' | 'error' | 'debug'
+      if (event.level === 'warning' || event.level === 'error') {
+        logger.warn(`renderer ${event.level}: ${event.message} (${event.sourceId}:${event.lineNumber})`)
+      }
+    })
+  }
+
+  if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'))
