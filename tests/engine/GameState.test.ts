@@ -112,4 +112,84 @@ describe('GameState', () => {
     expect(sum).toMatchObject({ startedAt: 10, endedAt: 99, catches: 1 })
     expect(g.snapshot().session.catches).toBe(0)
   })
+  it('startSession resets catchesSinceSell', () => {
+    const g = new GameState()
+    g.apply(fish([{ name: 'Cod', count: 4 }]))
+    expect(g.catchesSinceSell).toBe(4)
+    g.startSession()
+    expect(g.catchesSinceSell).toBe(0)
+  })
+  it('daily sets nextDailyAt = now + 24h and logs', () => {
+    const g = new GameState(() => 5000)
+    g.apply({ kind: 'daily', reward: '100 $' })
+    const s = g.snapshot()
+    expect(s.nextDailyAt).toBe(5000 + 24 * 3600 * 1000)
+    expect(s.log[0]).toMatchObject({ type: 'trade', text: 'Récompense quotidienne : 100 $' })
+  })
+
+  const cases: { name: string; ev: GameEvent; check: (s: ReturnType<GameState['snapshot']>) => void; log?: [string, string] }[] = [
+    {
+      name: 'stats merges totals and extras',
+      ev: { kind: 'stats', crates: 3, quests: 4, trips: 5, dailyStreak: 6, totals: { gold: 2, lava: 1 } },
+      check: (s) =>
+        expect(s.account.totals).toEqual({ gold: 2, lava: 1, crates: 3, quests: 4, trips: 5, dailyStreak: 6 })
+    },
+    {
+      name: 'stats without extras keeps only totals',
+      ev: { kind: 'stats', totals: { diamond: 1 } },
+      check: (s) => expect(s.account.totals).toEqual({ diamond: 1 })
+    },
+    {
+      name: 'boosts replace',
+      ev: { kind: 'boosts', active: [{ name: 'Luck', endsAt: 99 }] },
+      check: (s) => expect(s.boosts).toEqual([{ name: 'Luck', endsAt: 99 }])
+    },
+    {
+      name: 'quests replace',
+      ev: { kind: 'quests', quests: [{ label: 'Catch 10', progress: '3/10', done: false }] },
+      check: (s) => expect(s.quests).toEqual([{ label: 'Catch 10', progress: '3/10', done: false }])
+    },
+    {
+      name: 'purchase with cost',
+      ev: { kind: 'purchase', item: 'Bait', amount: 5, cost: 1500 },
+      check: () => {},
+      log: ['trade', 'Acheté : 5× Bait (1 500 $)']
+    },
+    {
+      name: 'purchase without cost',
+      ev: { kind: 'purchase', item: 'Bait', amount: 2 },
+      check: () => {},
+      log: ['trade', 'Acheté : 2× Bait']
+    },
+    {
+      name: 'captchaSolved',
+      ev: { kind: 'captchaSolved' },
+      check: () => {},
+      log: ['system', 'Captcha résolu']
+    },
+    {
+      name: 'captchaFailed',
+      ev: { kind: 'captchaFailed', text: 'wrong' },
+      check: () => {},
+      log: ['system', 'Captcha échoué : wrong']
+    },
+    { name: 'error', ev: { kind: 'error', text: 'boom' }, check: () => {}, log: ['error', 'boom'] },
+    {
+      name: 'unknown with title',
+      ev: { kind: 'unknown', title: 'Hi', text: 'there' },
+      check: () => {},
+      log: ['unknown', 'Hi — there']
+    },
+    { name: 'unknown without title', ev: { kind: 'unknown', text: 'there' }, check: () => {}, log: ['unknown', 'there'] }
+  ]
+  it.each(cases)('applies $name', ({ ev, check, log }) => {
+    const g = new GameState()
+    g.apply(ev)
+    const s = g.snapshot()
+    check(s)
+    if (log) {
+      expect(s.log).toHaveLength(1)
+      expect(s.log[0]).toMatchObject({ type: log[0], text: log[1] })
+    } else expect(s.log).toHaveLength(0)
+  })
 })
