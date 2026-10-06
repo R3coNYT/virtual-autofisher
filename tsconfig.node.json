@@ -11,5 +11,5 @@
     "baseUrl": ".",
     "paths": { "@shared/*": ["src/shared/*"] }
   },
-  "include": ["electron.vite.config.ts", "vitest.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/renderer/applyGamePatch.ts", "src/renderer/resolveFirstScreen.ts", "src/renderer/logBuffer.ts", "src/renderer/format.ts", "src/renderer/settingsBounds.ts", "tests/**/*"]
+  "include": ["electron.vite.config.ts", "vitest.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/renderer/applyGamePatch.ts", "src/renderer/resolveFirstScreen.ts", "src/renderer/logBuffer.ts", "src/renderer/format.ts", "src/renderer/settingsBounds.ts", "src/renderer/discordMarkdown.ts", "tests/**/*"]
 }

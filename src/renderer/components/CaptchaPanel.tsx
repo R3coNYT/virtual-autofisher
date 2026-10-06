@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent } from 'react'
 import { AlertCircle, CheckCircle2, ImageOff, Loader2, RefreshCw, ShieldAlert, Square } from 'lucide-react'
 import { canRegen } from '../settingsBounds'
 import { useStore } from '../store'
+import { DiscordMessage } from './DiscordMessage'
 import { cleanError, focusRing, primaryButton } from '../ui'
 
 const SENDING_TIMEOUT_MS = 10_000
@@ -133,29 +134,33 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
           </div>
         </header>
 
-        {captcha.imageUrl && !imgFailed ? (
-          <img
-            src={captcha.imageUrl}
-            alt="Virtual Fisher captcha image"
-            onError={() => setImgFailed(true)}
-            className="max-h-64 w-full rounded-xl border border-white/10 bg-black/30 object-contain"
-          />
-        ) : (
-          <p className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-4 text-sm text-slate-400">
-            <ImageOff className="h-4 w-4 shrink-0" aria-hidden />
-            {captcha.imageUrl ? 'The image could not be loaded: try "New image".' : 'No image: read the bot message below.'}
-          </p>
-        )}
+        {/* text captchas (code written in the message) have no image: nothing to show here then */}
+        {captcha.imageUrl &&
+          (!imgFailed ? (
+            <img
+              src={captcha.imageUrl}
+              alt="Virtual Fisher captcha image"
+              onError={() => setImgFailed(true)}
+              className="max-h-64 w-full rounded-xl border border-white/10 bg-black/30 object-contain"
+            />
+          ) : (
+            <p className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-4 text-sm text-slate-400">
+              <ImageOff className="h-4 w-4 shrink-0" aria-hidden />
+              The image could not be loaded: try &quot;New image&quot;.
+            </p>
+          ))}
 
-        {captcha.text && (
-          <p
-            className={`whitespace-pre-line rounded-xl border px-3 py-2.5 text-sm ${solved ? 'border-turquoise/30 bg-turquoise/10 text-turquoise' : 'border-white/10 bg-white/5 text-slate-200'}`}
-            aria-live="polite"
-          >
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">Latest bot message</span>
-            {captcha.text}
-          </p>
-        )}
+        {captcha.text &&
+          (solved ? (
+            <p className="rounded-xl border border-turquoise/30 bg-turquoise/10 px-3 py-2.5 text-sm text-turquoise" aria-live="polite">
+              {captcha.text}
+            </p>
+          ) : (
+            <section aria-live="polite" aria-label="Latest bot message">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">Latest bot message</span>
+              <DiscordMessage text={captcha.text} />
+            </section>
+          ))}
 
         <form onSubmit={submit} className="space-y-3" noValidate>
           <input

@@ -82,3 +82,15 @@ export function buildText(m: BotMessage): string {
   }
   return parts.map(cleanText).filter(Boolean).join('\n')
 }
+
+/** The message as Discord markdown (not cleaned), for display: content, titles in bold, descriptions, fields, footers. */
+export function rawText(m: BotMessage): string {
+  const parts: string[] = [m.content ?? '']
+  for (const e of m.embeds ?? []) {
+    if (e.title) parts.push(`**${e.title}**`)
+    parts.push(e.description ?? '')
+    for (const f of e.fields ?? []) parts.push(`**${f.name}**\n${f.value}`)
+    parts.push(e.footer ? `-# ${e.footer}` : '')
+  }
+  return parts.filter((p) => p.trim()).join('\n').trim()
+}
