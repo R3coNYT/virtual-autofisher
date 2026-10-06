@@ -6,7 +6,7 @@ Tout le code est écrit, relu et testé (232 tests automatiques au vert, install
 
 Deux options :
 
-- **Installeur** : `dist/Virtual AutoFisher Setup 1.0.0.exe`. Windows SmartScreen va avertir (« éditeur inconnu », l'exe n'est pas signé) → *Informations complémentaires* → *Exécuter quand même*.
+- **Installeur** : `VirtualAutoFisher-Setup-1.0.0.exe` (onglet *Releases* du dépôt GitHub, ou `dist/` si tu le construis toi-même). Windows SmartScreen va avertir (« éditeur inconnu », l'exe n'est pas signé) → *Informations complémentaires* → *Exécuter quand même*.
 - **Depuis le code** (recommandé pour le premier test, tu vois les logs) :
   ```bash
   npm run dev

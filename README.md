@@ -14,7 +14,7 @@ Application de bureau Windows (Electron + React) qui automatise le bot Discord *
 
 ### Depuis l'installeur
 
-1. Lancez `npm run build:win` (voir plus bas) ou récupérez `Virtual AutoFisher Setup x.y.z.exe` dans le dossier `dist/`.
+1. Téléchargez `VirtualAutoFisher-Setup-x.y.z.exe` depuis l'onglet **Releases** du dépôt GitHub (ou construisez-le avec `npm run build:win`, il arrive dans `dist/`).
 2. Exécutez l'installeur : vous pouvez choisir le dossier d'installation.
 3. Windows SmartScreen peut afficher un avertissement car l'installeur n'est pas signé : « Informations complémentaires » puis « Exécuter quand même ».
 
@@ -106,3 +106,12 @@ Le **mode capture** (Réglages > Avancé) enregistre les messages bruts du bot d
 <!-- TODO (utilisateur) : ajouter des captures d'écran : onboarding, tableau de bord, réglages, panneau captcha. -->
 
 *À venir.*
+
+## Publier une nouvelle version
+
+Chaque push sur `main` lance la GitHub Action [release.yml](.github/workflows/release.yml) : si la version de `package.json` n'a pas encore de release `v<version>`, elle lance les tests, construit l'installeur Windows et crée la release avec le `.exe`. Sinon elle ne fait rien.
+
+```bash
+npm version 1.0.1
+git push
+```

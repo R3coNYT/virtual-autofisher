@@ -18,6 +18,8 @@ win:
       arch: x64
   icon: build/icon.ico
 nsis:
+  # no spaces: the file is attached as-is to GitHub releases (.github/workflows/release.yml)
+  artifactName: VirtualAutoFisher-Setup-${version}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
