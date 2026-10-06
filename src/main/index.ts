@@ -67,6 +67,16 @@ function boot(): void {
   // log in once the renderer is listening, so it receives connection.status
   win.webContents.once('did-finish-load', () => void autoLogin())
 
+  // writes the session summary (synchronously) before the process goes away
+  app.on('before-quit', () => {
+    try {
+      engine.stop()
+    } catch (e) {
+      logger.error('engine.stop on quit failed', e)
+    }
+    void client.logout().catch(() => {})
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) win = createWindow()
   })

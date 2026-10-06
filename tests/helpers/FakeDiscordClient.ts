@@ -1,5 +1,5 @@
 import type { BotMessage, ChannelInfo, GuildInfo, SelfUser, SlashCommandInfo } from '../../src/shared/types'
-import type { DiscordClient, DiscordEventMap, SlashOptions } from '../../src/main/discord/DiscordClient'
+import { LoginError, type DiscordClient, type DiscordEventMap, type LoginErrorKind, type SlashOptions } from '../../src/main/discord/DiscordClient'
 
 const cmd = (name: string, i: number, options: string[] = []): SlashCommandInfo => ({
   name,
@@ -29,6 +29,7 @@ export class FakeDiscordClient implements DiscordClient {
   guilds: GuildInfo[] = []
   channels: Record<string, ChannelInfo[]> = {}
   failLogin?: boolean
+  failLoginKind: LoginErrorKind = 'invalidToken'
   failSend?: boolean
   activeChannel: string | null = null
 
@@ -41,7 +42,7 @@ export class FakeDiscordClient implements DiscordClient {
   }
 
   async login(_token: string): Promise<SelfUser> {
-    if (this.failLogin) throw new Error('Token invalide ou expiré')
+    if (this.failLogin) throw new LoginError(this.failLoginKind)
     return { id: FakeDiscordClient.SELF_ID, username: 'tester', avatarUrl: '' }
   }
 

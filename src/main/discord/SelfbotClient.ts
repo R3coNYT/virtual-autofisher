@@ -4,13 +4,21 @@ import { Client } from 'discord.js-selfbot-v13'
 import type { BotMessage, ChannelInfo, GuildInfo, SelfUser, SlashCommandInfo } from '../../shared/types'
 import { maskSecrets } from '../util/maskSecrets'
 import type { Logger } from '../util/logger'
-import { VIRTUAL_FISHER_ID, type DiscordClient, type DiscordEventMap, type SlashOptions } from './DiscordClient'
+import { LoginError, VIRTUAL_FISHER_ID, type DiscordClient, type DiscordEventMap, type SlashOptions } from './DiscordClient'
 import { orderSlashArgs } from './orderSlashArgs'
 import { toBotMessage, type LibMessageLike } from './toBotMessage'
 
 const LOGIN_TIMEOUT_MS = 20_000
 const MEMBER_FETCH_CONCURRENCY = 3
-const INVALID_TOKEN = 'Token invalide ou expiré'
+
+/** Auth rejection (lib TOKEN_INVALID / HTTP 401) vs. anything else (transport, timeout). */
+export function classifyLoginError(e: unknown): LoginError {
+  const err = e as { code?: unknown; status?: unknown; httpStatus?: unknown; message?: unknown } | null
+  const msg = typeof err?.message === 'string' ? err.message : String(e)
+  const rejected =
+    err?.code === 'TOKEN_INVALID' || err?.status === 401 || err?.httpStatus === 401 || /invalid token|401/i.test(msg)
+  return new LoginError(rejected ? 'invalidToken' : 'network')
+}
 
 type Listeners = { [E in keyof DiscordEventMap]: Set<DiscordEventMap[E]> }
 
@@ -88,7 +96,7 @@ export class SelfbotClient implements DiscordClient {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(INVALID_TOKEN)), LOGIN_TIMEOUT_MS)
+        const timer = setTimeout(() => reject(new LoginError('network')), LOGIN_TIMEOUT_MS)
         const done = (err?: Error): void => {
           clearTimeout(timer)
           if (err) reject(err)
@@ -99,18 +107,18 @@ export class SelfbotClient implements DiscordClient {
           // never log the raw error without masking: it may echo the token
           const msg = maskSecrets(e instanceof Error ? e.message : String(e))
           this.opts.logger?.warn(`login failed: ${msg}`)
-          done(new Error(INVALID_TOKEN))
+          done(classifyLoginError(e))
         })
       })
-    } catch {
+    } catch (e) {
       await this.logout()
-      throw new Error(INVALID_TOKEN)
+      throw e instanceof LoginError ? e : new LoginError('network')
     }
 
     const u = client.user
     if (!u) {
       await this.logout()
-      throw new Error(INVALID_TOKEN)
+      throw new LoginError('network')
     }
     this.selfId = u.id
     return { id: u.id, username: u.username, avatarUrl: u.displayAvatarURL() }

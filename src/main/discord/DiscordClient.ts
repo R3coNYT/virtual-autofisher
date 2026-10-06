@@ -2,6 +2,16 @@ import type { BotMessage, ChannelInfo, GuildInfo, SelfUser, SlashCommandInfo } f
 
 export const VIRTUAL_FISHER_ID = '574652751745777665'
 
+export type LoginErrorKind = 'invalidToken' | 'network'
+
+/** Login failure: `invalidToken` = Discord rejected the token; `network` = transport/timeout. */
+export class LoginError extends Error {
+  constructor(readonly kind: LoginErrorKind) {
+    super(kind === 'invalidToken' ? 'Token invalide ou expiré' : 'Connexion à Discord impossible')
+    this.name = 'LoginError'
+  }
+}
+
 export type SlashOptions = Record<string, string | number | boolean>
 
 export type DiscordEventMap = {

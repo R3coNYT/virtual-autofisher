@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { ConnectionStatus, EventChannel, EventMap } from '../../shared/ipc'
 import type { Config, EngineState, SelfUser, SessionSummary } from '../../shared/types'
 import type { ConfigStore } from '../config/ConfigStore'
-import type { DiscordClient } from '../discord/DiscordClient'
+import { LoginError, type DiscordClient } from '../discord/DiscordClient'
 import type { Engine } from '../engine/Engine'
 import type { GameState } from '../engine/GameState'
 import type { Logger } from '../util/logger'
@@ -36,6 +36,12 @@ export type HandlerDeps = {
 export function publicConfig(c: Config): Config {
   const { tokenEncrypted: _omit, ...rest } = c
   return rest
+}
+
+const RETRY_DELAYS_MS = [30_000, 60_000, 120_000]
+const ID = /^\d{5,25}$/
+const assertId = (v: unknown, what: string): void => {
+  if (typeof v !== 'string' || !ID.test(v)) throw new Error(`Identifiant ${what} invalide`)
 }
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
@@ -73,7 +79,10 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     else if (prev === 'captcha') send('captcha.hide', undefined)
     prev = s
   })
-  state.onPatch((patch, newLog) => send('game.patch', { patch, newLog }))
+  state.onPatch((patch, newLog) => {
+    send('game.patch', patch)
+    if (newLog.length) send('log.append', newLog)
+  })
   client.on('disconnected', () => setConnection('disconnected'))
   client.on('reconnected', () => setConnection('connected'))
   engine.onSessionEnd((s: SessionSummary) => {
@@ -87,8 +96,16 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
 
   // --- auth ---------------------------------------------------------------------------------
   handle('auth.setToken', async (token: string) => {
+    setConnection('connecting')
+    let me: SelfUser
+    try {
+      me = await client.login(token) // validate first: a bad token must not touch the running session
+    } catch (e) {
+      setConnection(user ? 'connected' : 'disconnected')
+      throw e
+    }
+    cancelRetry()
     engine.stop()
-    const me = await client.login(token)
     try {
       config.setToken(token)
     } catch (e) {
@@ -100,32 +117,56 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     return me
   })
   handle('auth.logout', async () => {
+    cancelRetry()
     engine.stop()
     await client.logout()
     config.clearToken()
     user = null
+    cancelRetry()
     setConnection('disconnected')
   })
   handle('auth.status', () => ({ user, target: config.get().target }))
 
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let attempt = 0
+  function cancelRetry(): void {
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = null
+    attempt = 0
+  }
+
+  /** Logs in with the stored token. Auth rejection clears it; network errors keep it and retry with backoff. */
   async function autoLogin(): Promise<void> {
+    retryTimer = null
     const token = config.getToken()
     if (!token) return
     setConnection('connecting')
     try {
       user = await client.login(token)
+      attempt = 0
       setConnection('connected')
-    } catch {
-      config.clearToken()
+    } catch (e) {
       user = null
-      setConnection('invalidToken')
+      if (e instanceof LoginError && e.kind === 'network') {
+        setConnection('disconnected', e.message)
+        const delay = RETRY_DELAYS_MS[Math.min(attempt++, RETRY_DELAYS_MS.length - 1)]
+        retryTimer = setTimeout(() => void autoLogin().catch((err) => logger.error('auto-login retry failed', err)), delay)
+      } else {
+        config.clearToken()
+        setConnection('invalidToken')
+      }
     }
   }
 
   // --- discord lookups / target -------------------------------------------------------------
   handle('guilds.list', () => client.listGuilds())
-  handle('channels.list', (guildId: string) => client.listChannels(guildId))
+  handle('channels.list', (guildId: string) => {
+    assertId(guildId, 'de serveur')
+    return client.listChannels(guildId)
+  })
   handle('target.set', async (guildId: string, channelId: string) => {
+    assertId(guildId, 'de serveur')
+    assertId(channelId, 'de salon')
     if (engine.state === 'captcha') throw new Error('Résolvez le captcha avant de changer de salon')
     const target = { guildId, channelId }
     const was = engine.state
@@ -153,7 +194,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   // --- config / app -------------------------------------------------------------------------
   handle('config.get', () => publicConfig(config.get()))
   handle('config.update', (patch: Partial<Config>) => {
-    const { tokenEncrypted: _omit, ...safe } = patch // the renderer can never write the token
+    const { tokenEncrypted: _omit, target: _target, ...safe } = patch // token and target are not writable here (target: target.set)
     return publicConfig(config.update(safe))
   })
   handle('app.openDataDir', async () => {

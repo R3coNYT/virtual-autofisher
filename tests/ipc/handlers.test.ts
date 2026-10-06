@@ -22,7 +22,7 @@ const fixture = (name: string): Partial<BotMessage> => {
   delete raw.channelId
   return raw
 }
-const T = { guildId: 'g1', channelId: 'c1' }
+const T = { guildId: '10001', channelId: '20001' }
 
 let dir: string
 beforeEach(() => {
@@ -93,7 +93,7 @@ describe('registerHandlers', () => {
     const { call, sent, client, api, config } = setup()
     config.setToken(TOKEN)
     await api.autoLogin()
-    client.guilds = [{ id: 'g1', name: 'G', iconUrl: null, hasVirtualFisher: true }]
+    client.guilds = [{ id: '10001', name: 'G', iconUrl: null, hasVirtualFisher: true }]
     await call('guilds.list')
     await call('target.set', T.guildId, T.channelId)
     await call('config.update', { capture: true })
@@ -113,15 +113,15 @@ describe('registerHandlers', () => {
 
   it('target.set persists the target and restarts a running engine', async () => {
     const { call, config, engine, client } = setup()
-    await call('target.set', 'g1', 'A')
-    expect(config.get().target).toEqual({ guildId: 'g1', channelId: 'A' })
+    await call('target.set', '10001', '20001')
+    expect(config.get().target).toEqual({ guildId: '10001', channelId: '20001' })
     expect(engine.state).toBe('idle') // not running: no start
     await call('engine.start')
     expect(engine.state).toBe('running')
-    await call('target.set', 'g1', 'B')
-    expect(config.get().target).toEqual({ guildId: 'g1', channelId: 'B' })
+    await call('target.set', '10001', '20002')
+    expect(config.get().target).toEqual({ guildId: '10001', channelId: '20002' })
     expect(engine.state).toBe('running')
-    expect(client.activeChannel).toBe('B')
+    expect(client.activeChannel).toBe('20002')
   })
 
   it('engine.start without a target rejects', async () => {
@@ -155,9 +155,11 @@ describe('registerHandlers', () => {
     client.emitBot(fixture('captcha-solved'))
     await vi.advanceTimersByTimeAsync(20_000)
     expect(channels()).toContain('captcha.hide')
-    const patch = sent.find((s) => s.channel === 'game.patch')?.payload as { patch: unknown; newLog: unknown[] }
-    expect(patch).toHaveProperty('patch')
-    expect(Array.isArray(patch.newLog)).toBe(true)
+    expect(sent.some((s) => s.channel === 'game.patch')).toBe(true)
+    const logs = sent.filter((s) => s.channel === 'log.append').map((s) => s.payload as unknown[])
+    expect(logs.length).toBeGreaterThan(0)
+    expect(logs.every((l) => Array.isArray(l) && l.length > 0)).toBe(true)
+    for (const s of sent.filter((x) => x.channel === 'game.patch')) expect(s.payload).not.toHaveProperty('newLog')
   })
 
   it('auto-login: valid token connects; invalid token is cleared and reported', async () => {
@@ -174,6 +176,66 @@ describe('registerHandlers', () => {
     expect(b.config.getToken()).toBeNull()
     expect(b.sent.at(-1)?.payload).toEqual({ status: 'invalidToken' })
     expect(await b.call('auth.status')).toMatchObject({ user: null })
+  })
+
+  it('auth.setToken with a bad token leaves a running session untouched', async () => {
+    const { call, config, engine, client, sent } = setup()
+    await call('auth.setToken', TOKEN)
+    config.update({ target: T })
+    await call('engine.start')
+    client.failLogin = true
+    await expect(call('auth.setToken', 'bad')).rejects.toThrow('Token invalide')
+    expect(engine.state).toBe('running')
+    expect(config.getToken()).toBe(TOKEN)
+    expect(sent.map((s) => s.payload)).toContainEqual({ status: 'connecting' })
+    expect(sent.at(-1)?.payload).toEqual({ status: 'connected' })
+  })
+
+  it('auto-login network failure keeps the token and retries with backoff', async () => {
+    const { api, config, client, sent } = setup()
+    config.setToken(TOKEN)
+    client.failLogin = true
+    client.failLoginKind = 'network'
+    await api.autoLogin()
+    expect(config.getToken()).toBe(TOKEN)
+    expect(sent.at(-1)?.payload).toEqual({ status: 'disconnected', message: 'Connexion à Discord impossible' })
+    await vi.advanceTimersByTimeAsync(29_000)
+    expect(sent.filter((s) => (s.payload as { status: string }).status === 'connecting')).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1_500) // 30 s: attempt 2, still failing
+    expect(sent.filter((s) => (s.payload as { status: string }).status === 'connecting')).toHaveLength(2)
+    client.failLogin = false
+    await vi.advanceTimersByTimeAsync(60_000) // 60 s later: succeeds
+    expect(sent.at(-1)?.payload).toEqual({ status: 'connected' })
+    expect(config.getToken()).toBe(TOKEN)
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(sent.filter((s) => (s.payload as { status: string }).status === 'connecting')).toHaveLength(3)
+  })
+
+  it('target.set validates ids; config.update cannot set the target', async () => {
+    const { call, config } = setup()
+    await expect(call('target.set', 'g1', '20001')).rejects.toThrow('invalide')
+    await expect(call('target.set', '10001', '')).rejects.toThrow('invalide')
+    await expect(call('channels.list', 'x')).rejects.toThrow('invalide')
+    expect(config.get().target).toBeNull()
+    await call('config.update', { target: T })
+    expect(config.get().target).toBeNull()
+  })
+
+  it('target.set while paused stops the engine; during a captcha it is rejected', async () => {
+    const { call, config, engine, client } = setup()
+    config.update({ target: T })
+    await call('engine.start')
+    await call('engine.pause')
+    expect(engine.state).toBe('paused')
+    await call('target.set', '10001', '20002')
+    expect(engine.state).toBe('idle')
+    expect(config.get().target).toEqual({ guildId: '10001', channelId: '20002' })
+
+    await call('engine.start')
+    client.emitBot(fixture('captcha-image'))
+    expect(engine.state).toBe('captcha')
+    await expect(call('target.set', '10001', '20003')).rejects.toThrow('captcha')
+    expect(config.get().target?.channelId).toBe('20002')
   })
 
   it('auth.logout stops the engine, clears the token and reports disconnected', async () => {

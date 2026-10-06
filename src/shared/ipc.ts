@@ -17,10 +17,11 @@ export type EventMap = {
   /**
    * `patch` is a partial snapshot. The renderer must REPLACE (not deep-merge) the nested section
    * values it contains (fishBySpecies, totals, rare, boosts, quests, ...): a key missing from a
-   * replaced section means it was removed. `newLog` holds the log entries appended by this patch.
+   * replaced section means it was removed. Log entries are NOT part of this payload: see 'log.append'.
    */
-  'game.patch': { patch: DeepPartial<GameSnapshot>; newLog: LogEntry[] }
-  'log.append': LogEntry
+  'game.patch': DeepPartial<GameSnapshot>
+  /** Log entries appended since the last event (single path for the log). */
+  'log.append': LogEntry[]
   'captcha.show': { imageUrl?: string; text: string }
   'captcha.hide': undefined
   'connection.status': { status: ConnectionStatus; message?: string }
