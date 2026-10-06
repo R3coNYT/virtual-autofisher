@@ -1,0 +1,14 @@
+{
+  "id": "1001",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "You caught:",
+      "description": "<:cod:123456789> **Cod** x2\n<:salmon:123456790> **Salmon** x1\n\n<:xp:123456791> +45 XP"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

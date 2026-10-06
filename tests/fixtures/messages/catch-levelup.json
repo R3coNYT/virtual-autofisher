@@ -1,0 +1,14 @@
+{
+  "id": "1002",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "You caught:",
+      "description": "<:cod:123456789> **Cod** x1\n<:crate:123456792> **Treasure:** you found a **Fishing Crate**!\n+120 XP\n<:levelup:123456793> **LEVEL UP!** You are now level **13**"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

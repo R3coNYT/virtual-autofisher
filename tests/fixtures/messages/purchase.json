@@ -1,0 +1,14 @@
+{
+  "id": "1012",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Shop",
+      "description": "<:bait:123456797> You bought **5x Worms** for **$250**."
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

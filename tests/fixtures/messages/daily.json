@@ -1,0 +1,14 @@
+{
+  "id": "1013",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Daily reward",
+      "description": "<:daily:123456804> You claimed your daily reward: **$5,000** and **1 Fishing Crate**!"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

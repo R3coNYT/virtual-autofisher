@@ -1,0 +1,15 @@
+{
+  "id": "1005",
+  "channelId": "900000000000000001",
+  "content": "<@111222333444555666> Please solve the captcha below with `/verify`",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Captcha",
+      "description": "Type the code shown in the image.",
+      "imageUrl": "https://cdn.example.test/captcha/abc123.png"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

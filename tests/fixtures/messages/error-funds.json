@@ -1,0 +1,14 @@
+{
+  "id": "1015",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Error",
+      "description": "<:no:123456807> You don't have enough money to buy that."
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

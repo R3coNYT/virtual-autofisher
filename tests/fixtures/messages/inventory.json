@@ -1,0 +1,14 @@
+{
+  "id": "1003",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Inventory of Flav",
+      "description": "<:coin:123456794> **Balance:** $1,234,567\n<:xp:123456791> You are **Level 12**, 3,450 XP to next level.\n<:rod:123456795> **Rod:** Wooden Rod.\n<:biome:123456796> **Current biome:** Lake.\n<:bait:123456797> **Bait:** Worms x12\n<:gold:123456798> **Gold Fish:** 3\n<:emerald:123456799> **Emerald Fish:** 1\n<:lava:123456800> **Lava Fish:** 0\n<:diamond:123456801> **Diamond Fish:** 2"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

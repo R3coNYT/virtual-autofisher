@@ -1,0 +1,14 @@
+{
+  "id": "1014",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Your quests",
+      "description": "<:quest:123456802> Catch 50 fish: 12/50\n✅ Sell 20 fish: 20/20\n<:quest:123456802> Open 3 crates: 1/3"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

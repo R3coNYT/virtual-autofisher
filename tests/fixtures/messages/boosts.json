@@ -1,0 +1,14 @@
+{
+  "id": "1011",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Active boosts",
+      "description": "<:buff:123456805> **Fishing Buff**: 4m 30s remaining\n<:buff:123456806> **Lucky Charm**: 1h 2m remaining"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

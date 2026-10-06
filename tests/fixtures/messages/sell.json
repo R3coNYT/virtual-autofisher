@@ -1,0 +1,14 @@
+{
+  "id": "1010",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Sold",
+      "description": "<:coin:123456794> You sold **25** fish for **$1,234** and gained +56 XP."
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

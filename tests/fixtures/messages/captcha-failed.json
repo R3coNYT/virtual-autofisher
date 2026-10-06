@@ -1,0 +1,14 @@
+{
+  "id": "1008",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Verification",
+      "description": "Incorrect code. Use **/verify** again to retry."
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

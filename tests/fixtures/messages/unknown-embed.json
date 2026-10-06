@@ -1,0 +1,14 @@
+{
+  "id": "1016",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Fish of the day",
+      "description": "<:cod:123456789> A calm sea today."
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}

@@ -1,0 +1,14 @@
+{
+  "id": "1004",
+  "channelId": "900000000000000001",
+  "content": "",
+  "embeds": [
+    {
+      "fields": [],
+      "title": "Statistics for Flav",
+      "description": "<:crate:123456792> Total crates opened: **14**\n<:quest:123456802> Total quests completed: **7**\n<:boat:123456803> Total trips: **88**\n<:daily:123456804> Daily streak: **5**\n<:gold:123456798> Total golden fish: **9**\n<:emerald:123456799> Total emerald fish: **4**\n<:lava:123456800> Total lava fish: **2**\n<:diamond:123456801> Total diamond fish: **1**"
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false
+}
