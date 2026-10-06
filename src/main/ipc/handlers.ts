@@ -46,7 +46,7 @@ const assertId = (v: unknown, what: string): void => {
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
 
-export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void>; dispose(): void } {
+export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void>; dispose(): void; startEngine(): Promise<void> } {
   const { ipc, config, client, engine, state, send, sessionsDir } = deps
   const logger = deps.logger ?? noopLogger
   let user: SelfUser | null = null
@@ -192,12 +192,13 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   })
 
   // --- engine -------------------------------------------------------------------------------
-  handle('engine.start', async () => {
+  const startEngine = async (): Promise<void> => {
     const target = config.get().target
     if (!target) throw new Error('Aucun salon sélectionné')
     await engine.start(target)
     send('engine.commands', engine.availableCommands)
-  })
+  }
+  handle('engine.start', startEngine)
   handle('engine.pause', () => engine.pause())
   handle('engine.resume', () => engine.resume())
   handle('engine.stop', () => engine.stop())
@@ -216,5 +217,5 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     await deps.openPath(deps.dataDir)
   })
 
-  return { autoLogin, dispose: cancelRetry }
+  return { autoLogin, dispose: cancelRetry, startEngine }
 }

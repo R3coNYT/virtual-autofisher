@@ -13,7 +13,7 @@ const trayImage = (name: string): Electron.NativeImage => nativeImage.createFrom
 export function createTray(
   win: BrowserWindow,
   engine: Engine,
-  opts: { getTarget: () => { guildId: string; channelId: string } | null; quit: () => void }
+  opts: { start: () => Promise<void>; onError: (e: unknown) => void; quit: () => void }
 ): Tray {
   const normal = trayImage('icon.png')
   const alert = trayImage('icon-alert.png')
@@ -27,7 +27,6 @@ export function createTray(
   }
 
   const toggle = (state: EngineState): { label: string; enabled: boolean; click: () => void } => {
-    const run = (p: Promise<void> | void): void => void Promise.resolve(p).catch(() => undefined)
     switch (state) {
       case 'running':
       case 'resting':
@@ -35,16 +34,16 @@ export function createTray(
       case 'paused':
         return { label: 'Reprendre', enabled: true, click: () => engine.resume() }
       case 'idle':
-      case 'error': {
-        const target = opts.getTarget()
-        return { label: 'Démarrer', enabled: target !== null, click: () => target && run(engine.start(target)) }
-      }
+      case 'error':
+        // the target is read when clicked (opts.start), so a channel picked later is honoured
+        return { label: 'Démarrer', enabled: true, click: () => void opts.start().catch(opts.onError) }
       default: // connecting, captcha: nothing to toggle
         return { label: 'Démarrer', enabled: false, click: () => undefined }
     }
   }
 
   const refresh = (state: EngineState): void => {
+    if (tray.isDestroyed()) return
     tray.setImage(state === 'captcha' ? alert : normal)
     tray.setToolTip(state === 'captcha' ? 'Virtual AutoFisher — captcha à résoudre' : 'Virtual AutoFisher')
     tray.setContextMenu(

@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, Eye, EyeOff, FolderOpen, Loader2, LogOut } from
 import type { Config, DeepPartial } from '../../shared/types'
 import { Background } from '../components/Background'
 import { cardCls } from '../components/StatCard'
-import { clampConfigPatch, commandMissing, parseNumberInput } from '../settingsBounds'
+import { BOUNDS, clampConfigPatch, commandMissing, parseNumberInput } from '../settingsBounds'
 import { useStore } from '../store'
 import { cleanError, focusRing, primaryButton } from '../ui'
 
@@ -79,6 +79,7 @@ function NumField(props: {
   min: number
   max?: number
   unit?: string
+  integer?: boolean
   onCommit: (n: number) => void
   disabled?: boolean
 }): JSX.Element {
@@ -89,7 +90,7 @@ function NumField(props: {
   function commit(): void {
     const n = parseNumberInput(draft)
     if (n === null) return setDraft(fmt(value))
-    const v = Math.min(max ?? Infinity, Math.max(min, n))
+    const v = Math.min(max ?? Infinity, Math.max(min, props.integer ? Math.round(n) : n))
     setDraft(fmt(v))
     if (v !== value) onCommit(v)
   }
@@ -286,13 +287,13 @@ export default function Settings(): JSX.Element {
 
         <Section title="Pêche">
           <Row label="Délai de base entre deux /fish" help="Minimum 2 s">
-            <NumField label="Délai de base" value={fishing.baseCooldownSec} min={2} unit="s" onCommit={(n) => void save({ fishing: { baseCooldownSec: n } })} />
+            <NumField label="Délai de base" value={fishing.baseCooldownSec} {...BOUNDS.baseCooldownSec} unit="s" onCommit={(n) => void save({ fishing: { baseCooldownSec: n } })} />
           </Row>
           <Row label="Variation aléatoire (±)" help="De 0 à 5 s">
-            <NumField label="Variation aléatoire" value={fishing.jitterSec} min={0} max={5} unit="s" onCommit={(n) => void save({ fishing: { jitterSec: n } })} />
+            <NumField label="Variation aléatoire" value={fishing.jitterSec} {...BOUNDS.jitterSec} unit="s" onCommit={(n) => void save({ fishing: { jitterSec: n } })} />
           </Row>
           <Row label="Écart minimum entre deux commandes" help="Toutes commandes confondues, minimum 2 s">
-            <NumField label="Écart minimum" value={fishing.minGapSec} min={2} unit="s" onCommit={(n) => void save({ fishing: { minGapSec: n } })} />
+            <NumField label="Écart minimum" value={fishing.minGapSec} {...BOUNDS.minGapSec} unit="s" onCommit={(n) => void save({ fishing: { minGapSec: n } })} />
           </Row>
         </Section>
 
@@ -312,7 +313,7 @@ export default function Settings(): JSX.Element {
             />
           </Row>
           <Row label={sell.mode === 'catches' ? 'Vendre toutes les N prises' : 'Vendre toutes les N minutes'} help="Minimum 1">
-            <NumField label="Valeur de N" value={sell.every} min={1} onCommit={(n) => void save({ sell: { every: n } })} />
+            <NumField label="Valeur de N" value={sell.every} {...BOUNDS.sellEvery} integer onCommit={(n) => void save({ sell: { every: n } })} />
           </Row>
         </Section>
 
@@ -342,14 +343,14 @@ export default function Settings(): JSX.Element {
           </Row>
           {!bait.autoAmount && (
             <Row label="Quantité par achat">
-              <NumField label="Quantité d'appât" value={bait.amount} min={0} onCommit={(n) => void save({ bait: { amount: Math.round(n) } })} />
+              <NumField label="Quantité d'appât" value={bait.amount} {...BOUNDS.baitAmount} integer onCommit={(n) => void save({ bait: { amount: Math.round(n) } })} />
             </Row>
           )}
         </Section>
 
         <Section title="Profil, daily et quêtes">
           <Row label="Actualiser le profil toutes les" help="Inventaire et statistiques, minimum 1 min" missing={missing('profile')}>
-            <NumField label="Intervalle du profil" value={profile.refreshMin} min={1} unit="min" onCommit={(n) => void save({ profile: { refreshMin: n } })} />
+            <NumField label="Intervalle du profil" value={profile.refreshMin} {...BOUNDS.refreshMin} unit="min" onCommit={(n) => void save({ profile: { refreshMin: n } })} />
           </Row>
           <Row label="Récompense quotidienne (/daily)" missing={missing('daily')}>
             <Toggle label="Daily automatique" checked={daily.enabled} onChange={(v) => void save({ daily: { enabled: v } })} />
@@ -364,15 +365,15 @@ export default function Settings(): JSX.Element {
             <Toggle label="Pauses régulières" checked={breaks.enabled} onChange={(v) => void save({ breaks: { enabled: v } })} />
           </Row>
           <Row label="Pêche avant chaque pause">
-            <NumField label="Durée de pêche" value={breaks.workMin} min={0} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workMin: n } })} />
-            <NumField label="Variation de la durée de pêche" value={breaks.workJitterMin} min={0} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workJitterMin: n } })} />
+            <NumField label="Durée de pêche" value={breaks.workMin} {...BOUNDS.breakMin} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workMin: n } })} />
+            <NumField label="Variation de la durée de pêche" value={breaks.workJitterMin} {...BOUNDS.breakMin} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workJitterMin: n } })} />
           </Row>
           <Row label="Durée d'une pause">
-            <NumField label="Durée de pause" value={breaks.restMin} min={0} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restMin: n } })} />
-            <NumField label="Variation de la durée de pause" value={breaks.restJitterMin} min={0} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restJitterMin: n } })} />
+            <NumField label="Durée de pause" value={breaks.restMin} {...BOUNDS.breakMin} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restMin: n } })} />
+            <NumField label="Variation de la durée de pause" value={breaks.restJitterMin} {...BOUNDS.breakMin} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restJitterMin: n } })} />
           </Row>
           <Row label="Arrêt automatique après" help="0 = pas de limite">
-            <NumField label="Limite de session" value={cfg.sessionLimitH} min={0} unit="h" onCommit={(n) => void save({ sessionLimitH: n })} />
+            <NumField label="Limite de session" value={cfg.sessionLimitH} {...BOUNDS.sessionLimitH} unit="h" onCommit={(n) => void save({ sessionLimitH: n })} />
           </Row>
         </Section>
 

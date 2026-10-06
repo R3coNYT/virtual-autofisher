@@ -30,6 +30,10 @@ describe('clampConfigPatch', () => {
     })
     expect(clampConfigPatch({ fishing: { baseCooldownSec: NaN } })).toEqual({})
   })
+  it('keeps bait.amount a non-negative integer', () => {
+    expect(clampConfigPatch({ bait: { amount: -4 } })).toEqual({ bait: { amount: 0 } })
+    expect(clampConfigPatch({ bait: { amount: 12.6 } })).toEqual({ bait: { amount: 13 } })
+  })
   it('does not mutate its input', () => {
     const p = { fishing: { baseCooldownSec: 1 } }
     clampConfigPatch(p)

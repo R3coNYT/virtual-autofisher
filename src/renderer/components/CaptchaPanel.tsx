@@ -22,6 +22,7 @@ export function CaptchaPanel(): JSX.Element | null {
 function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<typeof useStore.getState>['captcha']>; regenAvailable: boolean }): JSX.Element {
   const [answer, setAnswer] = useState('')
   const [sending, setSending] = useState(false)
+  const [noReply, setNoReply] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const input = useRef<HTMLInputElement>(null)
@@ -31,6 +32,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
   // a new captcha.show (new image, or the bot rejected the answer) ends the "Envoi…" state
   useEffect(() => {
     setSending(false)
+    setNoReply(false)
     setImgFailed(false)
     input.current?.focus()
     input.current?.select()
@@ -38,15 +40,21 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
 
   useEffect(() => {
     if (!sending) return
-    const t = setTimeout(() => setSending(false), SENDING_TIMEOUT_MS)
+    // no captcha.show/hide after 10 s: allow another try, with a hint
+    const t = setTimeout(() => {
+      setSending(false)
+      setNoReply(true)
+    }, SENDING_TIMEOUT_MS)
     return () => clearTimeout(t)
   }, [sending])
 
-  async function run(fn: () => Promise<void>): Promise<void> {
+  async function run(fn: () => Promise<void>, onSent?: () => void): Promise<void> {
     setError(null)
+    setNoReply(false)
     setSending(true)
     try {
       await fn()
+      onSent?.()
     } catch (e) {
       setSending(false)
       setError(cleanError(e))
@@ -57,8 +65,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
     e.preventDefault()
     const a = answer.trim()
     if (!a || sending) return
-    setAnswer('')
-    void run(() => window.api.captcha.submit(a))
+    void run(() => window.api.captcha.submit(a), () => setAnswer(''))
   }
 
   function onKeyDown(e: KeyboardEvent): void {
@@ -79,7 +86,17 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onKeyDown={onKeyDown}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onKeyDown={onKeyDown}
+      onMouseDown={(e) => {
+        // a click on the backdrop must not drop focus out of the modal
+        if (e.target === e.currentTarget) {
+          e.preventDefault()
+          input.current?.focus()
+        }
+      }}
+    >
       <div
         ref={box}
         role="dialog"
@@ -133,6 +150,11 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
             placeholder="Tapez la réponse"
             className={`w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-base text-white placeholder:text-slate-500 transition hover:border-white/20 focus:border-accent/60 ${focusRing}`}
           />
+          {noReply && !error && (
+            <p role="status" className="text-sm text-amber-300">
+              Pas de réponse, réessaie.
+            </p>
+          )}
           {error && (
             <p role="alert" className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

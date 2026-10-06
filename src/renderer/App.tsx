@@ -31,9 +31,14 @@ function Screen(): JSX.Element {
 
 export default function App(): JSX.Element {
   useApiEvents()
+  const blocked = useStore((s) => s.captcha !== null)
+  // while a captcha is open nothing behind the modal can be focused or read by assistive tech
+  const inertProps = blocked ? ({ inert: '', 'aria-hidden': true } as Record<string, unknown>) : {}
   return (
     <>
-      <Screen />
+      <div className="h-full" {...inertProps}>
+        <Screen />
+      </div>
       <CaptchaPanel />
     </>
   )

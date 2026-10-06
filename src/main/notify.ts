@@ -17,10 +17,17 @@ function flashUntilFocused(win: BrowserWindow): void {
   })
 }
 
+/** Keeps the live notification referenced so its click handler is not garbage-collected. */
+let lastNotification: Notification | null = null
+
 function show(win: BrowserWindow, title: string, body: string): void {
   if (!Notification.isSupported()) return
   const n = new Notification({ title, body })
   n.on('click', () => reveal(win))
+  n.on('close', () => {
+    if (lastNotification === n) lastNotification = null
+  })
+  lastNotification = n
   n.show()
 }
 

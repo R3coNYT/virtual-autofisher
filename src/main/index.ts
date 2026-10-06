@@ -70,7 +70,7 @@ function boot(): void {
   const send = (channel: string, payload: unknown): void => {
     if (!win.isDestroyed()) win.webContents.send(channel, payload)
   }
-  const { autoLogin, dispose } = registerHandlers({
+  const { autoLogin, dispose, startEngine } = registerHandlers({
     ipc: ipcMain,
     config,
     client,
@@ -96,7 +96,13 @@ function boot(): void {
     })
   }
   attachClose(win)
-  const tray = createTray(win, engine, { getTarget: () => config.get().target, quit: () => app.quit() })
+  const tray = createTray(win, engine, { start: startEngine,
+    onError: (e) => {
+      const msg = e instanceof Error ? e.message : String(e)
+      logger.warn(`tray start failed: ${msg}`)
+      send('toast', { level: 'error', message: msg })
+    },
+    quit: () => app.quit() })
 
   // notifications (captcha, level up, rare fish)
   let prevState: EngineState = engine.state
@@ -119,13 +125,13 @@ function boot(): void {
   // writes the session summary (synchronously) before the process goes away
   app.on('before-quit', () => {
     quitting = true
-    tray.destroy()
     dispose()
     try {
       engine.stop()
     } catch (e) {
       logger.error('engine.stop on quit failed', e)
     }
+    tray.destroy() // after engine.stop(): its state change still refreshes a live tray
     void client.logout().catch(() => {})
   })
 
