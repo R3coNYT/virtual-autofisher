@@ -1,0 +1,31 @@
+{
+  "id": "1557024607544934465",
+  "channelId": "c1",
+  "content": "",
+  "embeds": [
+    {
+      "title": "Other Player",
+      "description": ":x: You have no fish to sell! First catch some with **/fish**.",
+      "fields": []
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": true,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": "### Other Player"
+        },
+        {
+          "type": 10,
+          "content": ":x: You have no fish to sell! First catch some with **/fish**."
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

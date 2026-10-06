@@ -1,0 +1,73 @@
+{
+  "id": "1557024541249773700",
+  "channelId": "c1",
+  "content": "",
+  "embeds": [
+    {
+      "title": "Quest List",
+      "description": "Quests have multiple tiers, so keep fishing to get maximum rewards!\n\n**Daily Level-ups** - 2/3\n*Level up 3 time(s)*\n**Daily Fishing** - 3225/5000\n*Catch 5000 fish.*\n**Daily Artifact Hunter** - 19/25\n*Find 25 chests.*\n\n**SPECIAL DAILY QUEST**:\n**Pet Locator** - 0/1\n*Find a pet.*\n\nQuests reset in **10h 21m**",
+      "fields": []
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": "### Quest List"
+        },
+        {
+          "type": 10,
+          "content": "Quests have multiple tiers, so keep fishing to get maximum rewards!\n\n**Daily Level-ups** - 2/3\n*Level up 3 time(s)*\n**Daily Fishing** - 3225/5000\n*Catch 5000 fish.*\n**Daily Artifact Hunter** - 19/25\n*Find 25 chests.*\n\n**SPECIAL DAILY QUEST**:\n**Pet Locator** - 0/1\n*Find a pet.*\n\nQuests reset in **10h 21m**"
+        },
+        {
+          "type": 14,
+          "spacing": 1,
+          "divider": true
+        },
+        {
+          "components": [
+            {
+              "custom_id": "shop league 1 0",
+              "disabled": false,
+              "emoji": null,
+              "label": "League Shop",
+              "style": 1,
+              "type": 2,
+              "url": null
+            }
+          ],
+          "type": 1
+        },
+        {
+          "components": [
+            {
+              "custom_id": "play",
+              "disabled": false,
+              "emoji": null,
+              "label": "Return",
+              "style": 2,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "menu",
+              "disabled": false,
+              "emoji": null,
+              "label": "Back",
+              "style": 2,
+              "type": 2,
+              "url": null
+            }
+          ],
+          "type": 1
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

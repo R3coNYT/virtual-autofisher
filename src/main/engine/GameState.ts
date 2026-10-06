@@ -34,6 +34,7 @@ export class GameState {
       rod: null,
       biome: null,
       bait: null,
+      fishValue: null,
       rare: noRare(),
       totals: {}
     },
@@ -86,6 +87,7 @@ export class GameState {
             b.account.level = e.levelUp
             log('system', `Niveau ${e.levelUp} atteint !`, true)
           }
+          for (const q of e.questsCompleted ?? []) log('system', `Quête terminée : ${q}`, true)
           break
         }
         case 'sell':
@@ -103,6 +105,7 @@ export class GameState {
             rod: e.rod ?? null,
             biome: e.biome ?? null,
             bait: e.bait ?? null,
+            fishValue: e.fishValue ?? null,
             rare: { ...e.rare }
           })
           this.bait = e.bait ? e.bait.count : null
@@ -166,6 +169,13 @@ export class GameState {
     })
   }
 
+  setNextDailyAt(ts: number | null): void {
+    this.mutate((b) => {
+      b.nextDailyAt = ts
+    })
+  }
+
+  /** Zeroes the session counters: the previous session stays visible until the next one starts. */
   startSession(): void {
     this.mutate((b) => {
       b.session = { ...emptySession(), startedAt: this.now() }
@@ -173,12 +183,9 @@ export class GameState {
     })
   }
 
+  /** Summary of the session; its counters are kept (shown after the stop) until startSession(). */
   endSession(): SessionSummary {
-    const summary: SessionSummary = { ...structuredClone(this.body.session), endedAt: this.now() }
-    this.mutate((b) => {
-      b.session = emptySession()
-    })
-    return summary
+    return { ...structuredClone(this.body.session), endedAt: this.now() }
   }
 
   private mutate(fn: (b: Body, log: LogFn) => void): void {

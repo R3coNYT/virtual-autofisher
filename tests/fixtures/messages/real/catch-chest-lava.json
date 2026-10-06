@@ -1,0 +1,76 @@
+{
+  "id": "1557024649999679649",
+  "channelId": "c1",
+  "content": "",
+  "embeds": [
+    {
+      "title": "Player One",
+      "description": "### You caught:\n2 <:squid:1271939970797670491> Squid\n22 <:turtle:1271940014825275504> Turtle\n1 <:dolphin:1271940021439434802> Dolphin\nYou found a rare chest <:crate_rare:1271941268208877659>\nYou got 5 Lava Fish from the chest! <:lava_fish:1271940845767102574>\n+19,921 XP\nGlobal boost by **Messor**!",
+      "fields": []
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": "**Player One**"
+        },
+        {
+          "type": 10,
+          "content": "### You caught:"
+        },
+        {
+          "type": 10,
+          "content": "2 <:squid:1271939970797670491> Squid\n22 <:turtle:1271940014825275504> Turtle\n1 <:dolphin:1271940021439434802> Dolphin\nYou found a rare chest <:crate_rare:1271941268208877659>\nYou got 5 Lava Fish from the chest! <:lava_fish:1271940845767102574>\n+19,921 XP\nGlobal boost by **Messor**!"
+        },
+        {
+          "type": 14,
+          "spacing": 1,
+          "divider": true
+        },
+        {
+          "components": [
+            {
+              "custom_id": "fish 510716",
+              "disabled": false,
+              "emoji": {
+                "id": "1271940369030058034",
+                "name": "superium_rod",
+                "animated": false
+              },
+              "label": "Fish Again",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "sell all",
+              "disabled": false,
+              "emoji": null,
+              "label": "Sell",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "play",
+              "disabled": false,
+              "emoji": null,
+              "label": "Return",
+              "style": 2,
+              "type": 2,
+              "url": null
+            }
+          ],
+          "type": 1
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

@@ -110,7 +110,43 @@ describe('GameState', () => {
     t = 99
     const sum = g.endSession()
     expect(sum).toMatchObject({ startedAt: 10, endedAt: 99, catches: 1 })
-    expect(g.snapshot().session.catches).toBe(0)
+    // the last session stays visible after the stop…
+    expect(g.snapshot().session).toMatchObject({ startedAt: 10, catches: 1 })
+    // …and is zeroed when the next one starts
+    t = 200
+    g.startSession()
+    expect(g.snapshot().session).toMatchObject({ startedAt: 200, catches: 0, fishBySpecies: {}, moneyEarned: 0 })
+  })
+  it('endSession keeps the counters and emits no patch', () => {
+    const g = new GameState(() => 5)
+    g.startSession()
+    g.apply(fish([{ name: 'Cod', count: 2 }]))
+    const cb = vi.fn()
+    g.onPatch(cb)
+    expect(g.endSession()).toMatchObject({ catches: 2, endedAt: 5 })
+    expect(cb).not.toHaveBeenCalled() // nothing changed: no patch
+  })
+  it('inventory fish value goes to account.fishValue (null until known)', () => {
+    const g = new GameState()
+    expect(g.snapshot().account.fishValue).toBeNull()
+    g.apply({ ...inv(), fishValue: 32180326 } as GameEvent)
+    expect(g.snapshot().account.fishValue).toBe(32180326)
+    g.apply(inv())
+    expect(g.snapshot().account.fishValue).toBeNull()
+  })
+  it('a completed quest is logged as a highlighted system line', () => {
+    const g = new GameState()
+    g.apply(fish([{ name: 'Turtle', count: 1 }], { questsCompleted: ['Daily Level-ups Tier 3'] }))
+    const line = g.snapshot().log.find((l) => l.text.startsWith('Quête'))
+    expect(line).toMatchObject({ type: 'system', text: 'Quête terminée : Daily Level-ups Tier 3', highlight: true })
+  })
+  it('setNextDailyAt emits a patch', () => {
+    const g = new GameState()
+    const cb = vi.fn()
+    g.onPatch(cb)
+    g.setNextDailyAt(1234)
+    expect(cb.mock.calls[0][0]).toEqual({ nextDailyAt: 1234 })
+    expect(g.snapshot().nextDailyAt).toBe(1234)
   })
   it('startSession resets catchesSinceSell', () => {
     const g = new GameState()

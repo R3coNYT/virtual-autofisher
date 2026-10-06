@@ -1,0 +1,76 @@
+{
+  "id": "1557024587231928401",
+  "channelId": "c1",
+  "content": "",
+  "embeds": [
+    {
+      "title": "Player One",
+      "description": "### You caught:\n15 <:turtle:1271940014825275504> Turtle\nYou found a rare chest <:crate_rare:1271941268208877659>\nYou got **18,125 XP** from the chest.\n+30,137 XP\nGlobal boost by **Messor**!",
+      "fields": []
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": "**Player One**"
+        },
+        {
+          "type": 10,
+          "content": "### You caught:"
+        },
+        {
+          "type": 10,
+          "content": "15 <:turtle:1271940014825275504> Turtle\nYou found a rare chest <:crate_rare:1271941268208877659>\nYou got **18,125 XP** from the chest.\n+30,137 XP\nGlobal boost by **Messor**!"
+        },
+        {
+          "type": 14,
+          "spacing": 1,
+          "divider": true
+        },
+        {
+          "components": [
+            {
+              "custom_id": "fish 36761",
+              "disabled": false,
+              "emoji": {
+                "id": "1271940369030058034",
+                "name": "superium_rod",
+                "animated": false
+              },
+              "label": "Fish Again",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "sell all",
+              "disabled": false,
+              "emoji": null,
+              "label": "Sell",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "play",
+              "disabled": false,
+              "emoji": null,
+              "label": "Return",
+              "style": 2,
+              "type": 2,
+              "url": null
+            }
+          ],
+          "type": 1
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

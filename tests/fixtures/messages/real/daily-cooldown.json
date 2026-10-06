@@ -1,0 +1,54 @@
+{
+  "id": "1557024522870456402",
+  "channelId": "c1",
+  "content": "",
+  "embeds": [
+    {
+      "description": ":x: Daily reward on cooldown! (**10h 20m 25s**)",
+      "fields": []
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": ":x: Daily reward on cooldown! (**10h 20m 25s**)"
+        },
+        {
+          "type": 14,
+          "spacing": 1,
+          "divider": true
+        },
+        {
+          "components": [
+            {
+              "custom_id": "play",
+              "disabled": false,
+              "emoji": null,
+              "label": "Return",
+              "style": 2,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "menu",
+              "disabled": false,
+              "emoji": null,
+              "label": "Back",
+              "style": 2,
+              "type": 2,
+              "url": null
+            }
+          ],
+          "type": 1
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

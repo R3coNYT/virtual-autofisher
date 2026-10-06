@@ -7,7 +7,8 @@ export type DeepPartial<T> = T extends (infer U)[]
 export type CatchItem = { name: string; count: number }
 export type RareCounts = { gold: number; emerald: number; lava: number; diamond: number }
 
-export type EngineState = 'idle' | 'connecting' | 'running' | 'paused' | 'resting' | 'captcha' | 'error'
+/** 'stopping': graceful stop under way (fishing stopped, final /profile and /quests in flight). */
+export type EngineState = 'idle' | 'connecting' | 'running' | 'paused' | 'resting' | 'stopping' | 'captcha' | 'error'
 export type PauseReason = 'user' | 'network' | 'noResponse' | 'exception'
 /** Detail sent with each engine state: pause/error/stop reason, captcha content. */
 export type EngineInfo = {
@@ -47,7 +48,16 @@ export type BotMessage = {
 }
 
 export type GameEvent =
-  | { kind: 'catch'; items: CatchItem[]; xp?: number; levelUp?: number; treasure?: string[]; raw: string }
+  | {
+      kind: 'catch'
+      items: CatchItem[]
+      xp?: number
+      levelUp?: number
+      treasure?: string[]
+      /** Names of the quests completed by this catch (line after "QUEST COMPLETE"), e.g. "Daily Level-ups Tier 3". */
+      questsCompleted?: string[]
+      raw: string
+    }
   | { kind: 'sell'; earned: number; xp?: number }
   | {
       kind: 'inventory'
@@ -58,6 +68,8 @@ export type GameEvent =
       biome?: string
       bait?: { name: string; count: number }
       rare: { gold: number; emerald: number; lava: number; diamond: number }
+      /** "Fish Value: $N": what the fish in the inventory would sell for. */
+      fishValue?: number
     }
   | {
       kind: 'stats'
@@ -94,6 +106,8 @@ export type GameSnapshot = {
     rod: string | null
     biome: string | null
     bait: { name: string; count: number } | null
+    /** Sell value of the fish inventory (last /profile), null when unknown. */
+    fishValue: number | null
     rare: RareCounts
     totals: Partial<RareCounts> & { crates?: number; quests?: number; trips?: number; dailyStreak?: number }
   }

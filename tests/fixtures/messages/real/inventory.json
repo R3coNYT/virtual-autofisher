@@ -1,0 +1,86 @@
+{
+  "id": "1557024498887303258",
+  "channelId": "c1",
+  "content": "",
+  "embeds": [
+    {
+      "title": "Inventory of Player\\_One",
+      "description": "Clan: **Clan**\nBalance: **$136,570,161**.\n**Level 154**, 986,860/1,062,500 XP to next level.\nCurrently using <:superium_rod:1271940369030058034> **Superium Rod**.\nCurrent biome: <:biome_ocean:1271940899537948684> **Ocean**\nBait: **<:bait_magic:1271940608176427018> Magic Bait** (34,414)\n\n**Fish Inventory**\n**54** <:squid:1271939970797670491> Squid\n**644** <:turtle:1271940014825275504> Turtle\n**58** <:dolphin:1271940021439434802> Dolphin\nFish Value: $**32,180,326**\n\n**Exotic Fish**\n**2,353** <:gold_fish:1271940830004903968> Gold Fish\n**887** <:emerald_fish:1271940838984912896> Emerald Fish\n**43** <:lava_fish:1271940845767102574> Lava Fish\n**77** <:diamond_fish:1271940852729774201> Diamond Fish\n\n**Special**\n**38** <:hook:1290506451206279180> Hooks",
+      "fields": []
+    }
+  ],
+  "ephemeral": false,
+  "isEdit": false,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": "### Inventory of Player\\_One"
+        },
+        {
+          "type": 10,
+          "content": "Clan: **Clan**\nBalance: **$136,570,161**.\n**Level 154**, 986,860/1,062,500 XP to next level.\nCurrently using <:superium_rod:1271940369030058034> **Superium Rod**.\nCurrent biome: <:biome_ocean:1271940899537948684> **Ocean**\nBait: **<:bait_magic:1271940608176427018> Magic Bait** (34,414)\n\n**Fish Inventory**\n**54** <:squid:1271939970797670491> Squid\n**644** <:turtle:1271940014825275504> Turtle\n**58** <:dolphin:1271940021439434802> Dolphin\nFish Value: $**32,180,326**\n\n**Exotic Fish**\n**2,353** <:gold_fish:1271940830004903968> Gold Fish\n**887** <:emerald_fish:1271940838984912896> Emerald Fish\n**43** <:lava_fish:1271940845767102574> Lava Fish\n**77** <:diamond_fish:1271940852729774201> Diamond Fish\n\n**Special**\n**38** <:hook:1290506451206279180> Hooks"
+        },
+        {
+          "type": 14,
+          "spacing": 1,
+          "divider": true
+        },
+        {
+          "components": [
+            {
+              "custom_id": "profile 111 false 0",
+              "disabled": true,
+              "emoji": null,
+              "label": "Inventory",
+              "style": 3,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "profile 111 false 1",
+              "disabled": false,
+              "emoji": null,
+              "label": "Statistics",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "profile 111 false 2",
+              "disabled": false,
+              "emoji": null,
+              "label": "Leaderboards",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "profile 111 false 3",
+              "disabled": false,
+              "emoji": null,
+              "label": "Charms",
+              "style": 1,
+              "type": 2,
+              "url": null
+            },
+            {
+              "custom_id": "profile 111 false 4",
+              "disabled": false,
+              "emoji": null,
+              "label": "Pets",
+              "style": 1,
+              "type": 2,
+              "url": null
+            }
+          ],
+          "type": 1
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

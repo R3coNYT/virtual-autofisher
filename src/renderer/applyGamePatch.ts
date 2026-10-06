@@ -27,6 +27,7 @@ export function emptySnapshot(): GameSnapshot {
       rod: null,
       biome: null,
       bait: null,
+      fishValue: null,
       rare: { gold: 0, emerald: 0, lava: 0, diamond: 0 },
       totals: {}
     },

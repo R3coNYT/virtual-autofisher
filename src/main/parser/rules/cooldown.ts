@@ -10,9 +10,16 @@ const COOLDOWN = new RegExp(
   'i'
 )
 
+/** "Daily reward on cooldown! (10h 20m 25s)": "on cooldown" followed by a duration on the same line. */
+const ON_COOLDOWN = /\bon cooldown\b[^\n]*/i
+
 export const cooldownRule: Rule = (_m, text) => {
   const m = COOLDOWN.exec(text)
-  if (!m) return null
+  if (!m) {
+    const oc = ON_COOLDOWN.exec(text)
+    const ms = oc ? parseDuration(oc[0]) : null
+    return ms !== null ? { kind: 'cooldown', waitMs: ms } : null
+  }
   const span = m[1].replace(/\bmore\s+/gi, '')
   const withUnit = parseDuration(span)
   return { kind: 'cooldown', waitMs: withUnit ?? Math.round(parseFloat(span) * 1000) }

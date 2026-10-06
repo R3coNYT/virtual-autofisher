@@ -1,4 +1,5 @@
 import { afterColon, lines, parseNumber, titlesOf, type Rule } from '../text'
+import type { GameEvent } from '../../../shared/types'
 
 export const inventoryRule: Rule = (m, text) => {
   if (!titlesOf(m).some((t) => /inventory of/i.test(t)) && !/inventory of/i.test(text)) return null
@@ -9,8 +10,10 @@ export const inventoryRule: Rule = (m, text) => {
   let rod: string | undefined
   let biome: string | undefined
   let bait: { name: string; count: number } | undefined
+  let fishValue: number | undefined
   for (const line of lines(text)) {
-    if (/balance:/i.test(line)) balance = parseNumber(afterColon(line))
+    if (/fish value:/i.test(line)) fishValue = parseNumber(afterColon(line)) ?? undefined
+    else if (/balance:/i.test(line)) balance = parseNumber(afterColon(line))
     else if (/xp to next level/i.test(line)) {
       const lv = /level\s*(\d+)/i.exec(line)
       if (lv) level = parseInt(lv[1], 10)
@@ -32,5 +35,7 @@ export const inventoryRule: Rule = (m, text) => {
     } else if (/\brod\b/i.test(line)) rod = afterColon(line)
   }
   if (balance === null || level === null) return null
-  return { kind: 'inventory', balance, level, xpToNext, rod, biome, bait, rare }
+  const ev: GameEvent = { kind: 'inventory', balance, level, xpToNext, rod, biome, bait, rare }
+  if (fishValue !== undefined) ev.fishValue = fishValue
+  return ev
 }
