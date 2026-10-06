@@ -178,16 +178,18 @@ export class SelfbotClient implements DiscordClient {
     if (!this.selfId || !this.activeChannelId || msg.channelId !== this.activeChannelId) return
     const bm = toBotMessage(msg, this.selfId, isEdit)
     if (!bm) return
-    void this.capture(bm)
+    void this.capture(bm, msg.components)
     this.emit('botMessage', bm)
   }
 
-  private async capture(bm: BotMessage): Promise<void> {
+  /** Writes the parsed message plus the raw V2 components (exact bot markdown, for parser calibration). */
+  private async capture(bm: BotMessage, components?: LibMessageLike['components']): Promise<void> {
     const dir = this.opts.captureDir
     if (!dir) return
     try {
+      const raw = (components ?? []).map((c) => (c as { toJSON?: () => unknown }).toJSON?.() ?? c)
       await mkdir(dir, { recursive: true })
-      await writeFile(join(dir, `${Date.now()}-${bm.id}.json`), JSON.stringify(bm, null, 2), 'utf8')
+      await writeFile(join(dir, `${Date.now()}-${bm.id}.json`), JSON.stringify({ ...bm, rawComponents: raw }, null, 2), 'utf8')
     } catch (e) {
       this.opts.logger?.warn('capture failed', e)
     }

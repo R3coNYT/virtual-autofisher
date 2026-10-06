@@ -14,6 +14,8 @@ function parseItem(line: string): CatchItem | null {
   if (m) return { name: m[2].replace(/[.!]+$/, '').trim(), count: parseNumber(m[1]) ?? 1 }
   m = /^(.+?)\s+x\s*(\d[\d,]*)[.!]*$/i.exec(line)
   if (m) return { name: m[1].trim(), count: parseNumber(m[2]) ?? 1 }
+  m = /^(\d[\d,]*)\s+(\D.*)$/.exec(line) // "2 Squid" (current Virtual Fisher format)
+  if (m) return { name: m[2].replace(/[.!]+$/, '').trim(), count: parseNumber(m[1]) ?? 1 }
   if (line.length > 40 || line.includes(':')) return null
   return { name: line.replace(/[.!]+$/, '').trim(), count: 1 }
 }

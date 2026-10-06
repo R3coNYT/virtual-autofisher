@@ -24,9 +24,67 @@ export type LibMessageLike = {
   mentions: { users: Iter<IdLike> | Map<string, IdLike> }
   /** Collection (Map-like) of attachments; a captcha image may come as a file instead of an embed image. */
   attachments?: Iter<AttachmentLike> | Map<string, AttachmentLike> | null
+  /** Message components; Virtual Fisher's replies are "Components V2" (no content, no embeds). */
+  components?: ComponentLike[] | null
 }
 
 type AttachmentLike = { url?: string | null; contentType?: string | null; name?: string | null }
+
+/** Structural subset of the library's V2 components (type is a string name, or the raw number). */
+export type ComponentLike = {
+  type: string | number | null
+  content?: string | null
+  components?: ComponentLike[] | null
+  accessory?: ComponentLike | null
+  items?: { media?: { url?: string | null } | null }[] | null
+  media?: { url?: string | null } | null
+}
+
+const CONTAINER = new Set<string | number>(['CONTAINER', 17])
+const TEXT_DISPLAY = new Set<string | number>(['TEXT_DISPLAY', 10])
+const SECTION = new Set<string | number>(['SECTION', 9])
+const MEDIA_GALLERY = new Set<string | number>(['MEDIA_GALLERY', 12])
+const THUMBNAIL = new Set<string | number>(['THUMBNAIL', 11])
+
+/** Collects the text and the first image of a V2 component tree (buttons are ignored). */
+function walk(c: ComponentLike, acc: { texts: string[]; image?: string }): void {
+  const t = c.type ?? ''
+  if (TEXT_DISPLAY.has(t) && c.content) acc.texts.push(c.content)
+  else if (MEDIA_GALLERY.has(t)) acc.image ??= c.items?.find((i) => i.media?.url)?.media?.url ?? undefined
+  else if (THUMBNAIL.has(t)) acc.image ??= c.media?.url ?? undefined
+  if (CONTAINER.has(t) || SECTION.has(t)) for (const child of c.components ?? []) walk(child, acc)
+  if (c.accessory) walk(c.accessory, acc)
+}
+
+// A heading (`### Title`) or a line that is entirely bold (`**Title**`).
+const HEADING = /^(?:#{1,3}\s+(.+?)|\*\*([^*]+)\*\*)\s*$/
+
+/**
+ * Turns V2 components into synthetic embeds so the parser keeps working on one shape:
+ * one embed per top-level container (loose text displays/sections form one more).
+ * The first line becomes the title when it is a heading or a bold-only line.
+ */
+export function componentsToEmbeds(components: ComponentLike[]): BotMessage['embeds'] {
+  const groups: ComponentLike[][] = []
+  const loose: ComponentLike[] = []
+  for (const c of components) {
+    if (CONTAINER.has(c.type ?? '')) groups.push([c])
+    else loose.push(c)
+  }
+  if (loose.length) groups.push(loose)
+  const embeds: BotMessage['embeds'] = []
+  for (const group of groups) {
+    const acc: { texts: string[]; image?: string } = { texts: [] }
+    for (const c of group) walk(c, acc)
+    const lines = acc.texts.join('\n').split('\n')
+    const h = HEADING.exec(lines[0]?.trim() ?? '')
+    const title = h ? (h[1] ?? h[2]).trim() : undefined
+    const description = (h ? lines.slice(1) : lines).join('\n').trim()
+    if (!title && !description && !acc.image) continue
+    embeds.push({ title, description: description || undefined, fields: [], imageUrl: acc.image })
+  }
+  return embeds
+}
 
 const EPHEMERAL = 64
 
@@ -81,6 +139,7 @@ export function toBotMessage(msg: LibMessageLike, selfId: string, isEdit = false
     ephemeral,
     isEdit
   }
+  if (msg.components?.length) out.embeds.push(...componentsToEmbeds(msg.components))
   if (!out.embeds.some((e) => e.imageUrl)) {
     const url = firstImageAttachment(msg)
     if (url) {

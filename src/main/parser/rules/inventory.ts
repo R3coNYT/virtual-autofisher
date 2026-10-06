@@ -14,9 +14,12 @@ export const inventoryRule: Rule = (m, text) => {
     else if (/xp to next level/i.test(line)) {
       const lv = /level\s*(\d+)/i.exec(line)
       if (lv) level = parseInt(lv[1], 10)
+      const frac = /(\d[\d,]*)\s*\/\s*(\d[\d,]*)\s*xp to next/i.exec(line) // "764,946/1,062,500 XP to next level"
       const xp = /([\d,.]+\s*[kmb]?)\s*xp to next/i.exec(line)
-      if (xp) xpToNext = parseNumber(xp[1]) ?? undefined
-    } else if (/current biome:/i.test(line)) biome = afterColon(line)
+      if (frac) xpToNext = (parseNumber(frac[2]) ?? 0) - (parseNumber(frac[1]) ?? 0)
+      else if (xp) xpToNext = parseNumber(xp[1]) ?? undefined
+    } else if (/currently using/i.test(line)) rod = line.replace(/^.*currently using/i, '').replace(/[.!]+$/, '').trim()
+    else if (/current biome:/i.test(line)) biome = afterColon(line)
     else if (/gold(?:en)? fish/i.test(line)) rare.gold = parseNumber(afterColon(line)) ?? 0
     else if (/emerald fish/i.test(line)) rare.emerald = parseNumber(afterColon(line)) ?? 0
     else if (/lava fish/i.test(line)) rare.lava = parseNumber(afterColon(line)) ?? 0
