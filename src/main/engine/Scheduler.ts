@@ -41,6 +41,8 @@ export class Scheduler {
   private running = false
   private frozen = false
   private resting = false
+  /** Maintenance commands pushed and not yet sent, by dedupe key. */
+  private pending = new Map<string, QueuedCommand>()
   private buyBlockedUntil = { buff: -Infinity, bait: -Infinity }
   private readonly rand: () => number
 
@@ -66,15 +68,19 @@ export class Scheduler {
     this.loop('daily', () => this.dailyTick(), true)
     this.loop('quests', () => this.questsTick(), true)
     this.loop('sell', () => this.sellTick(), false, this.sellIntervalMs() ?? POLL_MS)
-    if (cfg.buffs.enabled && this.has('boosts')) this.push({ name: 'boosts', priority: 'maintenance', key: 'boosts' })
-    this.armBuff('fish', this.buffGraceMs())
-    this.armBuff('treasure', this.buffGraceMs())
+    if (cfg.buffs.enabled && this.has('boosts')) {
+      // buff timers are armed from the /boosts reply (endsAt), or by onCommandFailed
+      this.push({ name: 'boosts', priority: 'maintenance', key: 'boosts' })
+    } else {
+      this.armBuffs(cfg.buffs.enabled ? this.buffGraceMs() : POLL_MS)
+    }
     this.armWork()
   }
 
   stop(): void {
     for (const s of this.slots.values()) if (s.handle) clearTimeout(s.handle)
     this.slots.clear()
+    this.pending.clear()
     this.running = this.frozen = this.resting = false
     this.state.setNextFishAt(null)
   }
@@ -111,7 +117,7 @@ export class Scheduler {
       case 'boosts':
         for (const type of ['fish', 'treasure'] as const) {
           const b = e.active.find((x) => buffType(x.name) === type)
-          this.armBuff(type, b ? Math.max(0, b.endsAt - Date.now()) + this.buffGraceMs() : 0)
+          this.armBuff(type, (b ? Math.max(0, b.endsAt - Date.now()) : 0) + this.buffGraceMs())
         }
         break
       case 'purchase': {
@@ -126,6 +132,31 @@ export class Scheduler {
   /** The /fish got no usable answer (timeout, error, unknown): try again after a normal delay. */
   retryFish(): void {
     if (this.running) this.fishAfter(fishDelayMs(this.getConfig().fishing, this.rand))
+  }
+
+  /** A queued command was sent: it is no longer at risk of being dropped by a queue clear. */
+  onSent(c: QueuedCommand): void {
+    if (c.key !== undefined && this.pending.get(c.key) === c) this.pending.delete(c.key)
+  }
+
+  /** A maintenance command got no answer even after its retry. */
+  onCommandFailed(c: QueuedCommand): void {
+    if (this.running && c.key === 'boosts') this.armBuffs(this.buffGraceMs()) // fallback without endsAt
+  }
+
+  /**
+   * The queue was emptied (captcha): every maintenance command still waiting in it is
+   * requested again 5–30 s after the scheduler thaws (the timers are frozen until then).
+   */
+  onQueueCleared(): void {
+    for (const [key, cmd] of this.pending) {
+      this.set(`redo-${key}`, this.buffGraceMs(), () => {
+        const what = key === 'bait' ? 'bait' : key.startsWith('buff-') ? 'buff' : null
+        if (what && Date.now() < this.buyBlockedUntil[what]) return
+        this.push(cmd)
+      })
+    }
+    this.pending.clear()
   }
 
   /** Not enough money: stop buying this kind of item for `ms`. */
@@ -190,6 +221,11 @@ export class Scheduler {
 
   private buffGraceMs(): number {
     return randomBetweenMs(5, 30, this.rand)
+  }
+
+  private armBuffs(ms: number): void {
+    this.armBuff('fish', ms)
+    this.armBuff('treasure', ms)
   }
 
   private armBuff(type: 'fish' | 'treasure', ms: number): void {
@@ -266,7 +302,8 @@ export class Scheduler {
 
   /** Pushes only while actively fishing: never while frozen (pause/captcha) or resting. */
   private push(c: QueuedCommand): void {
-    if (this.runnable('activity')) this.queue.push(c)
+    if (!this.runnable('activity') || !this.queue.push(c)) return
+    if (c.priority === 'maintenance' && c.key !== undefined) this.pending.set(c.key, c)
   }
 
   /** Runs `tick` now (or after `firstDelay`) and re-arms with its returned delay, POLL_MS when disabled. */

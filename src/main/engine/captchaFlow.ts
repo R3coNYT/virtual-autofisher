@@ -84,6 +84,7 @@ export class CaptchaFlow {
     this.d.queue.clear()
     this.d.queue.pause()
     this.d.scheduler.freeze()
+    this.d.scheduler.onQueueCleared() // dropped maintenance is re-requested after the thaw
     this.cancelResume()
     if (st !== 'captcha') this.d.gameState.apply(ev) // counts the captcha once, not on each update
     this.info = { captchaImageUrl: ev.imageUrl ?? this.info.captchaImageUrl, captchaText: ev.text }

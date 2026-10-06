@@ -52,6 +52,8 @@ export class Engine {
   private readonly getConfig: EngineDeps['config']['get']
   /** Command whose reply we are waiting for (cleared by the reply or a timeout). */
   private awaiting: QueuedCommand | null = null
+  /** Copies pushed by retryOnce: they are not retried again. */
+  private retries = new WeakSet<QueuedCommand>()
   private lastMaintenanceKey: string | undefined
   private failures = 0
   private rateLimitUntil = -Infinity
@@ -116,6 +118,10 @@ export class Engine {
 
   async start(target: Target): Promise<void> {
     try {
+      if (this.current === 'captcha') {
+        // never drop an unsolved captcha by switching channel
+        return this.logger.warn('Démarrage refusé : un captcha doit être résolu')
+      }
       if (this.current !== 'idle' && this.current !== 'error') {
         if (this.target?.guildId === target.guildId && this.target.channelId === target.channelId) return
         this.stop()
@@ -144,11 +150,12 @@ export class Engine {
       this.sessionStartedAt = Date.now()
       this.sessionTimer = setInterval(() => this.guard(() => this.checkSessionLimit()), SESSION_CHECK_MS)
 
-      if (this.current === 'captcha') {
+      if (this.state === 'captcha') { // getter: may have changed during the await
         // a captcha arrived while connecting: keep everything frozen and empty
         this.scheduler.start()
         this.queue.clear()
         this.scheduler.freeze()
+        this.scheduler.onQueueCleared()
         return
       }
       this.setState('running')
@@ -242,11 +249,24 @@ export class Engine {
     if (!ACTIVE.includes(this.current)) return
     if (cause !== 'timeout') this.logger.warn(`Envoi de /${c.name} impossible`, cause)
     this.failures++
-    if (c.name === 'fish') this.scheduler.retryFish()
+    this.retryOnce(c)
     if (this.failures >= MAX_FAILURES) {
       this.failures = 0
       this.pause('noResponse')
     }
+  }
+
+  /** Spec §7: a command without answer is tried again once (fish via its normal delay). */
+  private retryOnce(c: QueuedCommand): void {
+    if (c.priority === 'verify') return // a /verify is only ever sent by a user click
+    if (c.priority === 'fish') return this.scheduler.retryFish()
+    if (this.retries.has(c)) {
+      if (c.priority === 'maintenance') this.scheduler.onCommandFailed(c)
+      return
+    }
+    const again: QueuedCommand = { ...c }
+    this.retries.add(again)
+    this.queue.push(again)
   }
 
   private onDisconnected(): void {
@@ -284,6 +304,7 @@ export class Engine {
     if (!target) throw new Error('Aucun salon actif')
     this.awaiting = c
     if (c.priority === 'maintenance') this.lastMaintenanceKey = c.key
+    this.scheduler.onSent(c)
     this.gameState.markCommandSent(c.name)
     const opts = c.options && Object.keys(c.options).length ? c.options : undefined
     await this.client.sendSlash(target.channelId, c.name, opts)
