@@ -9,6 +9,6 @@ describe('classifyLoginError', () => {
   })
   it('maps transport errors to network', () => {
     expect(classifyLoginError(new Error('getaddrinfo ENOTFOUND discord.com')).kind).toBe('network')
-    expect(classifyLoginError('boom').message).toBe('Connexion à Discord impossible')
+    expect(classifyLoginError('boom').message).toBe('Unable to connect to Discord')
   })
 })

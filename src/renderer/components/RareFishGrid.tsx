@@ -11,7 +11,7 @@ const RARES: { key: keyof RareCounts; label: string; cls: string }[] = [
 
 export const RareFishGrid = memo(function RareFishGrid({ session, total }: { session: RareCounts; total: RareCounts }): JSX.Element {
   return (
-    <section aria-label="Poissons rares" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <section aria-label="Rare fish" className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {RARES.map(({ key, label, cls }) => (
         <div key={key} className={`${cardCls} p-3`}>
           <p className={`text-xs font-semibold ${cls}`}>{label}</p>
@@ -19,7 +19,7 @@ export const RareFishGrid = memo(function RareFishGrid({ session, total }: { ses
             +{session[key]}
             <span className="ml-1 text-xs font-normal text-slate-400">session</span>
           </p>
-          <p className="text-xs text-slate-400">Total : {total[key]}</p>
+          <p className="text-xs text-slate-400">Total: {total[key]}</p>
         </div>
       ))}
     </section>

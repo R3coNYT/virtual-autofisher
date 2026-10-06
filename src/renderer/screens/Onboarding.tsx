@@ -7,17 +7,17 @@ import { useStore } from '../store'
 import { cleanError, focusRing, primaryButton } from '../ui'
 
 const RISKS = [
-  "Utiliser son token utilisateur est contraire aux conditions d'utilisation de Discord : votre compte s'expose à un bannissement.",
-  'Virtual Fisher interdit les macros : risque de remise à zéro ou de bannissement de votre progression.',
-  "Le captcha doit toujours être résolu par vous : l'application ne le résout jamais à votre place."
+  "Using your user token goes against Discord's Terms of Service: your account may be banned.",
+  'Virtual Fisher forbids macros: your progress may be reset or banned.',
+  'The captcha must always be solved by you: the app never solves it for you.'
 ]
 
 const STEPS = [
-  'Ouvrez Discord dans votre navigateur (discord.com/app) et connectez-vous.',
-  'Appuyez sur F12 pour ouvrir les outils de développement.',
-  'Allez dans l’onglet « Réseau » (Network).',
-  'Tapez « api » dans le filtre, puis cliquez sur une requête.',
-  'Dans les en-têtes de requête, copiez la valeur de « authorization ».'
+  'Open Discord in your browser (discord.com/app) and log in.',
+  'Press F12 to open the developer tools.',
+  'Go to the "Network" tab.',
+  'Type "api" in the filter, then click a request.',
+  'In the request headers, copy the value of "authorization".'
 ]
 
 export default function Onboarding(): JSX.Element {
@@ -72,13 +72,13 @@ export default function Onboarding(): JSX.Element {
           </span>
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-white">Virtual AutoFisher</h1>
-            <p className="text-sm text-slate-400">Connectez votre compte Discord pour commencer.</p>
+            <p className="text-sm text-slate-400">Connect your Discord account to get started.</p>
           </div>
         </header>
 
         <section aria-labelledby="risk-title" className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5 backdrop-blur">
           <h2 id="risk-title" className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-300">
-            <ShieldAlert className="h-4 w-4" aria-hidden /> Avant de continuer
+            <ShieldAlert className="h-4 w-4" aria-hidden /> Before you continue
           </h2>
           <ul className="space-y-2 text-sm leading-relaxed text-slate-300">
             {RISKS.map((r) => (
@@ -95,7 +95,7 @@ export default function Onboarding(): JSX.Element {
               onChange={(e) => setAccepted(e.target.checked)}
               className={`h-4 w-4 cursor-pointer rounded border-white/20 bg-white/10 accent-accent ${focusRing}`}
             />
-            J&apos;ai compris les risques
+            I understand the risks
           </label>
         </section>
 
@@ -112,18 +112,18 @@ export default function Onboarding(): JSX.Element {
                 <div className="h-20 w-20 rounded-full border-2 border-accent/60 bg-white/10" />
               )}
               <div>
-                <p className="text-xs uppercase tracking-wider text-slate-400">Connecté en tant que</p>
+                <p className="text-xs uppercase tracking-wider text-slate-400">Logged in as</p>
                 <p className="text-lg font-semibold text-white">{confirmed.username}</p>
               </div>
               <button type="button" onClick={proceed} autoFocus className={primaryButton}>
-                Continuer <ArrowRight className="h-4 w-4" aria-hidden />
+                Continue <ArrowRight className="h-4 w-4" aria-hidden />
               </button>
             </div>
           ) : (
             <form onSubmit={submit} className="space-y-4" noValidate>
               <div>
                 <label htmlFor={tokenId} className="mb-1.5 block text-sm font-medium text-slate-200">
-                  Token Discord
+                  Discord token
                 </label>
                 <div className="relative">
                   <input
@@ -133,14 +133,14 @@ export default function Onboarding(): JSX.Element {
                     onChange={(e) => setToken(e.target.value)}
                     autoComplete="off"
                     spellCheck={false}
-                    placeholder="Collez votre token ici"
+                    placeholder="Paste your token here"
                     aria-invalid={shownError ? true : undefined}
                     className={`w-full rounded-xl border border-white/10 bg-black/20 py-2.5 pl-3.5 pr-11 font-mono text-sm text-white placeholder:font-sans placeholder:text-slate-500 transition hover:border-white/20 focus:border-accent/60 ${focusRing}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShow((v) => !v)}
-                    aria-label={show ? 'Masquer le token' : 'Afficher le token'}
+                    aria-label={show ? 'Hide the token' : 'Show the token'}
                     aria-pressed={show}
                     className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white ${focusRing}`}
                   >
@@ -149,7 +149,7 @@ export default function Onboarding(): JSX.Element {
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
                   <Lock className="h-3 w-3 shrink-0 text-turquoise" aria-hidden />
-                  Votre token reste sur cet ordinateur, chiffré, et n&apos;est envoyé qu&apos;à Discord.
+                  Your token stays on this computer, encrypted, and is only sent to Discord.
                 </p>
               </div>
 
@@ -161,7 +161,7 @@ export default function Onboarding(): JSX.Element {
                   aria-controls={helpId}
                   className={`inline-flex items-center gap-1.5 rounded-md text-sm text-accent transition hover:text-turquoise ${focusRing}`}
                 >
-                  Comment trouver mon token ?
+                  How do I find my token?
                   <ChevronDown className={`h-4 w-4 transition-transform ${helpOpen ? 'rotate-180' : ''}`} aria-hidden />
                 </button>
                 {helpOpen && (
@@ -188,11 +188,11 @@ export default function Onboarding(): JSX.Element {
 
               <button type="submit" disabled={!canSubmit} className={`${primaryButton} w-full`}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-                {busy ? 'Connexion…' : 'Connexion'}
+                {busy ? 'Logging in…' : 'Log in'}
               </button>
               {!accepted && (
                 <p className="text-center text-xs text-slate-500">
-                  Cochez « J&apos;ai compris les risques » pour activer la connexion.
+                  Check "I understand the risks" to enable login.
                 </p>
               )}
             </form>

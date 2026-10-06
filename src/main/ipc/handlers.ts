@@ -41,7 +41,7 @@ export function publicConfig(c: Config): Config {
 const RETRY_DELAYS_MS = [30_000, 60_000, 120_000]
 const ID = /^\d{5,25}$/
 const assertId = (v: unknown, what: string): void => {
-  if (typeof v !== 'string' || !ID.test(v)) throw new Error(`Identifiant ${what} invalide`)
+  if (typeof v !== 'string' || !ID.test(v)) throw new Error(`Invalid ${what} id`)
 }
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
@@ -56,13 +56,13 @@ function captchaPayload(info: EngineInfo | undefined): CaptchaPayload {
 function stateToast(s: EngineState, prev: EngineState, info: EngineInfo | undefined): EventMap['toast'] | null {
   const reason = info?.reason
   if (s === 'paused' && prev !== 'paused' && reason === 'noResponse') {
-    return { level: 'error', message: 'Virtual Fisher ne répond pas — pêche en pause' }
+    return { level: 'error', message: 'Virtual Fisher is not responding — fishing paused' }
   }
   if (s === 'paused' && prev !== 'paused' && reason === 'exception') {
-    return { level: 'error', message: 'Erreur inattendue — pêche en pause' }
+    return { level: 'error', message: 'Unexpected error — fishing paused' }
   }
-  if (s === 'error') return { level: 'error', message: reason ? `Erreur : ${reason}` : 'Erreur du moteur' }
-  if (s === 'idle' && reason) return { level: 'info', message: `${reason} — pêche arrêtée` }
+  if (s === 'error') return { level: 'error', message: reason ? `Error: ${reason}` : 'Engine error' }
+  if (s === 'idle' && reason) return { level: 'info', message: `${reason} — fishing stopped` }
   return null
 }
 
@@ -115,7 +115,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
       mkdirSync(sessionsDir, { recursive: true })
       writeFileSync(join(sessionsDir, `${s.startedAt ?? s.endedAt}.json`), JSON.stringify(s, null, 2), 'utf8')
     } catch (e) {
-      logger.error('Écriture du résumé de session impossible', e)
+      logger.error('Unable to write the session summary', e)
     }
   })
 
@@ -198,13 +198,13 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   // --- discord lookups / target -------------------------------------------------------------
   handle('guilds.list', () => client.listGuilds())
   handle('channels.list', (guildId: string) => {
-    assertId(guildId, 'de serveur')
+    assertId(guildId, 'server')
     return client.listChannels(guildId)
   })
   handle('target.set', async (guildId: string, channelId: string) => {
-    assertId(guildId, 'de serveur')
-    assertId(channelId, 'de salon')
-    if (engine.state === 'captcha') throw new Error('Résolvez le captcha avant de changer de salon')
+    assertId(guildId, 'server')
+    assertId(channelId, 'channel')
+    if (engine.state === 'captcha') throw new Error('Solve the captcha before changing channel')
     const target = { guildId, channelId }
     const was = engine.state
     config.update({ target })
@@ -216,14 +216,14 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   // --- engine -------------------------------------------------------------------------------
   const startEngine = async (): Promise<void> => {
     const target = config.get().target
-    if (!target) throw new Error('Aucun salon sélectionné')
+    if (!target) throw new Error('No channel selected')
     await engine.start(target)
     send('engine.commands', engine.availableCommands)
   }
   handle('engine.start', startEngine)
   handle('engine.pause', () => engine.pause())
   handle('engine.resume', () => engine.resume())
-  // graceful unless told otherwise; during a captcha « Arrêter » always means now
+  // graceful unless told otherwise; during a captcha "Stop" always means now
   handle('engine.stop', (graceful?: unknown) =>
     engine.stop({ graceful: graceful !== false && engine.state !== 'captcha' })
   )

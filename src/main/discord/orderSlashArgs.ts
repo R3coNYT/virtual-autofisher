@@ -10,7 +10,7 @@ export type SlashArg = string | number | boolean | undefined
 export function orderSlashArgs(info: SlashCommandInfo, options: SlashOptions): SlashArg[] {
   const names = info.options.map((o) => o.name)
   for (const name of Object.keys(options)) {
-    if (!names.includes(name)) throw new Error(`Option inconnue : ${name}`)
+    if (!names.includes(name)) throw new Error(`Unknown option: ${name}`)
   }
   let last = -1
   names.forEach((n, i) => {

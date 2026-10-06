@@ -7,7 +7,7 @@ export type LoginErrorKind = 'invalidToken' | 'network'
 /** Login failure: `invalidToken` = Discord rejected the token; `network` = transport/timeout. */
 export class LoginError extends Error {
   constructor(readonly kind: LoginErrorKind) {
-    super(kind === 'invalidToken' ? 'Token invalide ou expiré' : 'Connexion à Discord impossible')
+    super(kind === 'invalidToken' ? 'Invalid or expired token' : 'Unable to connect to Discord')
     this.name = 'LoginError'
   }
 }

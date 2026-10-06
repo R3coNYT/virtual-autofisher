@@ -11,7 +11,7 @@ import type {
   SlashCommandInfo
 } from './types'
 
-/** Événements main → renderer : nom du canal → type de la charge utile. */
+/** Main → renderer events: channel name → payload type. */
 export type EventMap = {
   'engine.state': { state: EngineState; info?: EngineInfo }
   'engine.commands': SlashCommandInfo[]
@@ -54,7 +54,7 @@ export type AuthStatus = {
 
 export type EventChannel = keyof EventMap
 
-/** API exposée au renderer par le preload (window.api). */
+/** API exposed to the renderer by the preload (window.api). */
 export type Api = {
   auth: {
     setToken(token: string): Promise<SelfUser>

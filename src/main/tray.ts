@@ -32,15 +32,15 @@ export function createTray(
       case 'resting':
         return { label: 'Pause', enabled: true, click: () => engine.pause() }
       case 'paused':
-        return { label: 'Reprendre', enabled: true, click: () => engine.resume() }
+        return { label: 'Resume', enabled: true, click: () => engine.resume() }
       case 'stopping': // shown like running, nothing to toggle while the stop completes
         return { label: 'Pause', enabled: false, click: () => undefined }
       case 'idle':
       case 'error':
         // the target is read when clicked (opts.start), so a channel picked later is honoured
-        return { label: 'Démarrer', enabled: true, click: () => void opts.start().catch(opts.onError) }
+        return { label: 'Start', enabled: true, click: () => void opts.start().catch(opts.onError) }
       default: // connecting, captcha: nothing to toggle
-        return { label: 'Démarrer', enabled: false, click: () => undefined }
+        return { label: 'Start', enabled: false, click: () => undefined }
     }
   }
 
@@ -50,11 +50,11 @@ export function createTray(
       case 'running':
       case 'resting':
       case 'paused':
-        return { label: 'Arrêter', enabled: true, click: () => engine.stop({ graceful: true }) }
+        return { label: 'Stop', enabled: true, click: () => engine.stop({ graceful: true }) }
       case 'stopping':
-        return { label: "Forcer l'arrêt", enabled: true, click: () => engine.stop() }
+        return { label: 'Force stop', enabled: true, click: () => engine.stop() }
       default: // idle, error, connecting, captcha (the captcha panel has its own stop)
-        return { label: 'Arrêter', enabled: false, click: () => undefined }
+        return { label: 'Stop', enabled: false, click: () => undefined }
     }
   }
 
@@ -63,18 +63,18 @@ export function createTray(
     tray.setImage(state === 'captcha' ? alert : normal)
     tray.setToolTip(
       state === 'captcha'
-        ? 'Virtual AutoFisher — captcha à résoudre'
+        ? 'Virtual AutoFisher — captcha to solve'
         : state === 'stopping'
-          ? 'Virtual AutoFisher — arrêt en cours'
+          ? 'Virtual AutoFisher — stopping'
           : 'Virtual AutoFisher'
     )
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: 'Afficher', click: showWindow },
+        { label: 'Show', click: showWindow },
         { ...toggle(state) },
         { ...stopItem(state) },
         { type: 'separator' },
-        { label: 'Quitter', click: opts.quit }
+        { label: 'Quit', click: opts.quit }
       ])
     )
   }

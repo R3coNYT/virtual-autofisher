@@ -28,7 +28,7 @@ describe('GameState', () => {
     expect(s.session.catches).toBe(3)
     expect(s.session.xpEarned).toBe(5)
     expect(g.catchesSinceSell).toBe(3)
-    expect(s.log[0]).toMatchObject({ type: 'catch', text: 'Pêché : 2× Cod, 1× Salmon' })
+    expect(s.log[0]).toMatchObject({ type: 'catch', text: 'Caught: 2× Cod, 1× Salmon' })
   })
   it('counts rare fish', () => {
     const g = new GameState()
@@ -42,7 +42,7 @@ describe('GameState', () => {
     expect(g.snapshot().session.moneyEarned).toBe(1234)
     expect(g.snapshot().session.sells).toBe(1)
     expect(g.catchesSinceSell).toBe(0)
-    expect(g.snapshot().log.at(-1)!.text).toBe('Vendu pour 1 234 $')
+    expect(g.snapshot().log.at(-1)!.text).toBe('Sold for $1,234')
   })
   it('inventory updates account and recalibrates bait; catch decrements it', () => {
     const g = new GameState()
@@ -68,7 +68,7 @@ describe('GameState', () => {
     g.apply(fish([{ name: 'Cod', count: 1 }], { levelUp: 12 }))
     const s = g.snapshot()
     expect(s.account.level).toBe(12)
-    expect(s.log.find((l) => l.highlight)!.text).toBe('Niveau 12 atteint !')
+    expect(s.log.find((l) => l.highlight)).toMatchObject({ text: 'Reached level 12!', levelUp: 12 })
   })
   it('onPatch receives only changed fields and new log entries', () => {
     const g = new GameState()
@@ -137,8 +137,8 @@ describe('GameState', () => {
   it('a completed quest is logged as a highlighted system line', () => {
     const g = new GameState()
     g.apply(fish([{ name: 'Turtle', count: 1 }], { questsCompleted: ['Daily Level-ups Tier 3'] }))
-    const line = g.snapshot().log.find((l) => l.text.startsWith('Quête'))
-    expect(line).toMatchObject({ type: 'system', text: 'Quête terminée : Daily Level-ups Tier 3', highlight: true })
+    const line = g.snapshot().log.find((l) => l.text.startsWith('Quest'))
+    expect(line).toMatchObject({ type: 'system', text: 'Quest completed: Daily Level-ups Tier 3', highlight: true })
   })
   it('setNextDailyAt emits a patch', () => {
     const g = new GameState()
@@ -160,7 +160,7 @@ describe('GameState', () => {
     g.apply({ kind: 'daily', reward: '100 $' })
     const s = g.snapshot()
     expect(s.nextDailyAt).toBe(5000 + 24 * 3600 * 1000)
-    expect(s.log[0]).toMatchObject({ type: 'trade', text: 'Récompense quotidienne : 100 $' })
+    expect(s.log[0]).toMatchObject({ type: 'trade', text: 'Daily reward: 100 $' })
   })
 
   const cases: { name: string; ev: GameEvent; check: (s: ReturnType<GameState['snapshot']>) => void; log?: [string, string] }[] = [
@@ -189,25 +189,25 @@ describe('GameState', () => {
       name: 'purchase with cost',
       ev: { kind: 'purchase', item: 'Bait', amount: 5, cost: 1500 },
       check: () => {},
-      log: ['trade', 'Acheté : 5× Bait (1 500 $)']
+      log: ['trade', 'Bought: 5× Bait ($1,500)']
     },
     {
       name: 'purchase without cost',
       ev: { kind: 'purchase', item: 'Bait', amount: 2 },
       check: () => {},
-      log: ['trade', 'Acheté : 2× Bait']
+      log: ['trade', 'Bought: 2× Bait']
     },
     {
       name: 'captchaSolved',
       ev: { kind: 'captchaSolved' },
       check: () => {},
-      log: ['system', 'Captcha résolu']
+      log: ['system', 'Captcha solved']
     },
     {
       name: 'captchaFailed',
       ev: { kind: 'captchaFailed', text: 'wrong' },
       check: () => {},
-      log: ['system', 'Captcha échoué : wrong']
+      log: ['system', 'Captcha failed: wrong']
     },
     { name: 'error', ev: { kind: 'error', text: 'boom' }, check: () => {}, log: ['error', 'boom'] },
     {

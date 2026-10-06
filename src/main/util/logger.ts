@@ -34,7 +34,7 @@ export function createLogger(dir: string): Logger {
       const line = maskSecrets(`${new Date().toISOString()} ${level} ${msg}${stringify(extra)}`)
       appendFileSync(file, line + '\n', 'utf8')
     } catch {
-      // le journal ne doit jamais faire planter l'application
+      // logging must never crash the app
     }
   }
 

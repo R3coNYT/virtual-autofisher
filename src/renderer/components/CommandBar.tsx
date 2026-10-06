@@ -32,10 +32,10 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
 
   const captcha = engineState === 'captcha'
   const locked = captcha || !ACTIVE.includes(engineState)
-  const lockReason = captcha ? 'Résolvez le captcha d’abord' : 'Démarrez la pêche pour envoyer des commandes'
+  const lockReason = captcha ? 'Solve the captcha first' : 'Start fishing to send commands'
   const find = (name: string): SlashCommandInfo | undefined => commands.find((c) => c.name === name)
   const reasonFor = (name: string): string | undefined =>
-    locked ? lockReason : find(name) ? undefined : `/${name} indisponible sur ce serveur`
+    locked ? lockReason : find(name) ? undefined : `/${name} unavailable on this server`
 
   const fail = (e: unknown): void => useStore.getState().pushToast({ level: 'error', message: cleanError(e) })
   const send = (name: string, options?: Record<string, string | number>): void => {
@@ -58,7 +58,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
   }
 
   return (
-    <section className={`${cardCls} flex flex-wrap items-center gap-2 p-3`} aria-label="Commandes rapides">
+    <section className={`${cardCls} flex flex-wrap items-center gap-2 p-3`} aria-label="Quick commands">
       {QUICK.map((q) => {
         const cmd = find(q.name)
         const reason = reasonFor(q.name)
@@ -68,7 +68,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
             type="button"
             className={btn}
             disabled={!!reason}
-            title={reason ?? `Envoyer ${q.label}`}
+            title={reason ?? `Send ${q.label}`}
             onClick={() => cmd && send(q.name, q.options?.(cmd))}
           >
             {q.label}
@@ -78,7 +78,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
 
       <div className="flex items-center gap-1.5 border-l border-white/10 pl-2" role="group" aria-label="Coinflip">
         <select
-          aria-label="Côté du coinflip"
+          aria-label="Coinflip side"
           value={sideValue}
           onChange={(e) => setSide(e.target.value)}
           disabled={!!flipReason}
@@ -86,7 +86,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
         >
           {sides.map((s) => (
             <option key={s} value={s} className="bg-ocean">
-              {flip.choices?.length ? s.charAt(0).toUpperCase() + s.slice(1) : s === 'heads' ? 'Face (heads)' : 'Pile (tails)'}
+              {flip.choices?.length ? s.charAt(0).toUpperCase() + s.slice(1) : s === 'heads' ? 'Heads' : 'Tails'}
             </option>
           ))}
         </select>
@@ -94,8 +94,8 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
           type="number"
           min={1}
           inputMode="numeric"
-          placeholder="Montant"
-          aria-label="Montant du coinflip"
+          placeholder="Amount"
+          aria-label="Coinflip amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           disabled={!!flipReason}
@@ -105,7 +105,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
           type="button"
           className={btn}
           disabled={!!flipReason || !flipValid}
-          title={flipReason ?? (flipValid ? 'Envoyer /coinflip' : 'Saisissez un montant')}
+          title={flipReason ?? (flipValid ? 'Send /coinflip' : 'Enter an amount')}
           onClick={() => send('coinflip', { [flip.side]: sideValue, [flip.amount]: amountNum })}
         >
           /coinflip
@@ -119,8 +119,8 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
           onChange={(e) => setLine(e.target.value)}
           disabled={locked}
           title={locked ? lockReason : undefined}
-          placeholder="/commande option=valeur"
-          aria-label="Commande libre"
+          placeholder="/command option=value"
+          aria-label="Free command"
           className={`${field} min-w-0 flex-1`}
         />
         <datalist id={listId}>
@@ -128,7 +128,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
             <option key={c.name} value={`/${c.name} ${c.options.map((o) => `${o.name}=`).join(' ')}`.trim()} />
           ))}
         </datalist>
-        <button type="submit" className={btn} disabled={locked || !line.trim()} aria-label="Envoyer la commande" title="Envoyer">
+        <button type="submit" className={btn} disabled={locked || !line.trim()} aria-label="Send the command" title="Send">
           <Send className="h-3.5 w-3.5" aria-hidden />
         </button>
       </form>

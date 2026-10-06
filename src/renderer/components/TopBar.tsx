@@ -44,10 +44,10 @@ function Control(props: {
 }
 
 const PAUSE_REASONS: Record<string, string> = {
-  user: 'Mise en pause par vous',
-  network: 'Connexion à Discord perdue',
-  noResponse: 'Virtual Fisher ne répond pas',
-  exception: 'Erreur inattendue'
+  user: 'Paused by you',
+  network: 'Connection to Discord lost',
+  noResponse: 'Virtual Fisher is not responding',
+  exception: 'Unexpected error'
 }
 
 /** Why the engine is paused, in error, or stopped on its own (session limit). */
@@ -68,7 +68,7 @@ function SessionClock(): JSX.Element | null {
   const now = useNow()
   if (startedAt == null) return null
   return (
-    <span className="text-sm tabular-nums text-slate-300" title="Durée de la session">
+    <span className="text-sm tabular-nums text-slate-300" title="Session duration">
       {formatDuration(now - startedAt)}
     </span>
   )
@@ -80,7 +80,7 @@ export const TopBar = memo(function TopBar(): JSX.Element {
   const target = useStore((s) => s.target)
   const goto = useStore((s) => s.goto)
   const engine = window.api.engine
-  const guildLabel = names && names.guildId === target?.guildId ? names.guildName : (target?.guildId ?? 'Aucun serveur')
+  const guildLabel = names && names.guildId === target?.guildId ? names.guildName : (target?.guildId ?? 'No server')
   const channelLabel = names && names.channelId === target?.channelId ? names.channelName : (target?.channelId ?? '—')
 
   return (
@@ -88,7 +88,7 @@ export const TopBar = memo(function TopBar(): JSX.Element {
       <button
         type="button"
         onClick={() => goto('picker')}
-        title="Changer de serveur ou de salon"
+        title="Change server or channel"
         className={`flex min-w-0 max-w-[18rem] items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white transition hover:bg-white/10 ${focusRing}`}
       >
         <span className="truncate font-medium">{guildLabel}</span>
@@ -102,11 +102,11 @@ export const TopBar = memo(function TopBar(): JSX.Element {
       <div className="ml-auto flex items-center gap-2">
         {state === 'connecting' && (
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Connexion…
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Connecting…
           </span>
         )}
         {(state === 'idle' || state === 'error') && (
-          <Control label="Démarrer" icon={<Play className={ICON} aria-hidden />} run={() => engine.start()} tone={GO} />
+          <Control label="Start" icon={<Play className={ICON} aria-hidden />} run={() => engine.start()} tone={GO} />
         )}
         {(state === 'running' || state === 'resting') && (
           <Control label="Pause" icon={<Pause className={ICON} aria-hidden />} run={() => engine.pause()} tone={PAUSE} />
@@ -116,12 +116,12 @@ export const TopBar = memo(function TopBar(): JSX.Element {
           <Control label="Pause" icon={<Pause className={ICON} aria-hidden />} run={async () => undefined} tone={PAUSE} disabled />
         )}
         {state === 'paused' && (
-          <Control label="Reprendre" icon={<Play className={ICON} aria-hidden />} run={() => engine.resume()} tone={GO} />
+          <Control label="Resume" icon={<Play className={ICON} aria-hidden />} run={() => engine.resume()} tone={GO} />
         )}
         {state === 'stopping' ? (
           <Control
-            label="Forcer l'arrêt"
-            title="Arrêter tout de suite, sans attendre /profile et /quests"
+            label="Force stop"
+            title="Stop right now, without waiting for /profile and /quests"
             icon={<Square className={ICON} aria-hidden />}
             run={() => engine.stop(false)}
             tone={STOP}
@@ -130,8 +130,8 @@ export const TopBar = memo(function TopBar(): JSX.Element {
           state !== 'idle' &&
           state !== 'error' && (
             <Control
-              label="Arrêter"
-              title="Arrêt propre : /profile et /quests puis arrêt"
+              label="Stop"
+              title="Graceful stop: /profile and /quests, then stop"
               icon={<Square className={ICON} aria-hidden />}
               run={() => engine.stop(true)}
               tone={STOP}
@@ -141,8 +141,8 @@ export const TopBar = memo(function TopBar(): JSX.Element {
         <button
           type="button"
           onClick={() => goto('settings')}
-          aria-label="Réglages"
-          title="Réglages"
+          aria-label="Settings"
+          title="Settings"
           className={`rounded-lg border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white ${focusRing}`}
         >
           <Settings className="h-4 w-4" aria-hidden />

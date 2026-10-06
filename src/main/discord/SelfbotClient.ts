@@ -196,7 +196,7 @@ export class SelfbotClient implements DiscordClient {
   }
 
   private requireClient(): Client {
-    if (!this.client || !this.selfId) throw new Error('Non connecté')
+    if (!this.client || !this.selfId) throw new Error('Not connected')
     return this.client
   }
 
@@ -296,10 +296,10 @@ export class SelfbotClient implements DiscordClient {
   async sendSlash(channelId: string, command: string, options: SlashOptions = {}): Promise<void> {
     const client = this.requireClient()
     const channel = client.channels.cache.get(channelId)
-    if (!channel || !channel.isText()) throw new Error('Salon introuvable')
+    if (!channel || !channel.isText()) throw new Error('Channel not found')
     const guildId = 'guildId' in channel ? (channel.guildId as string | null) : null
     const info = guildId ? (await this.getBotCommands(guildId)).find((c) => c.name === command) : undefined
-    if (!info) throw new Error(`Commande introuvable : /${command}`)
+    if (!info) throw new Error(`Command not found: /${command}`)
     const ordered = orderSlashArgs(info, options)
     this.lastSlash = { command, at: Date.now() }
     try {

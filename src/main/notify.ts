@@ -34,15 +34,15 @@ function show(win: BrowserWindow, title: string, body: string): void {
 /** Clickable Windows notification (brings the window forward), optional beep, taskbar flash. */
 export function notifyCaptcha(win: BrowserWindow, cfg: Config['notifications']): void {
   if (!cfg.captcha) return
-  show(win, 'Captcha Virtual Fisher', 'Résous le captcha pour reprendre la pêche.')
+  show(win, 'Virtual Fisher captcha', 'Solve the captcha to resume fishing.')
   if (cfg.sound) shell.beep()
   flashUntilFocused(win)
 }
 
 export function notifyLevelUp(win: BrowserWindow, cfg: Config['notifications'], level: number): void {
-  if (cfg.levelUp) show(win, 'Niveau supérieur !', `Vous avez atteint le niveau ${level}.`)
+  if (cfg.levelUp) show(win, 'Level up!', `You reached level ${level}.`)
 }
 
 export function notifyRareFish(win: BrowserWindow, cfg: Config['notifications'], kinds: string[]): void {
-  if (cfg.rareFish && kinds.length) show(win, 'Poisson rare !', `Vous avez pêché : ${kinds.join(', ')}.`)
+  if (cfg.rareFish && kinds.length) show(win, 'Rare fish!', `You caught: ${kinds.join(', ')}.`)
 }

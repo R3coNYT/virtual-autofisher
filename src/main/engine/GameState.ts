@@ -3,7 +3,7 @@ import type { DeepPartial, GameEvent, GameSnapshot, LogEntry, RareCounts, Sessio
 type Session = GameSnapshot['session']
 type PatchCb = (patch: DeepPartial<GameSnapshot>, newLog: LogEntry[]) => void
 type Body = Omit<GameSnapshot, 'log'>
-type LogFn = (type: LogEntry['type'], text: string, highlight?: boolean) => void
+type LogFn = (type: LogEntry['type'], text: string, highlight?: boolean, extra?: Pick<LogEntry, 'levelUp'>) => void
 
 const LOG_CAP = 500
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -21,7 +21,8 @@ const emptySession = (): Session => ({
   commandsSent: 0,
   rareCaught: noRare()
 })
-const fmt = (n: number): string => Math.round(n).toLocaleString('fr-FR').replace(/[  ]/g, ' ')
+/** 1234 -> "$1,234" (en-US). */
+const money = (n: number): string => `$${Math.round(n).toLocaleString('en-US')}`
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
 
@@ -82,12 +83,12 @@ export class GameState {
           }
           if (this.bait !== null) this.bait = Math.max(0, this.bait - 1)
           if (e.xp) s.xpEarned += e.xp
-          log('catch', `Pêché : ${e.items.map((i) => `${i.count}× ${i.name}`).join(', ') || 'rien'}`)
+          log('catch', `Caught: ${e.items.map((i) => `${i.count}× ${i.name}`).join(', ') || 'nothing'}`)
           if (e.levelUp !== undefined) {
             b.account.level = e.levelUp
-            log('system', `Niveau ${e.levelUp} atteint !`, true)
+            log('system', `Reached level ${e.levelUp}!`, true, { levelUp: e.levelUp })
           }
-          for (const q of e.questsCompleted ?? []) log('system', `Quête terminée : ${q}`, true)
+          for (const q of e.questsCompleted ?? []) log('system', `Quest completed: ${q}`, true)
           break
         }
         case 'sell':
@@ -95,7 +96,7 @@ export class GameState {
           if (e.xp) s.xpEarned += e.xp
           s.sells++
           this.sinceSell = 0
-          log('trade', `Vendu pour ${fmt(e.earned)} $`)
+          log('trade', `Sold for ${money(e.earned)}`)
           break
         case 'inventory':
           Object.assign(b.account, {
@@ -122,24 +123,24 @@ export class GameState {
           b.boosts = e.active.map((x) => ({ ...x }))
           break
         case 'purchase':
-          log('trade', `Acheté : ${e.amount}× ${e.item}${e.cost !== undefined ? ` (${fmt(e.cost)} $)` : ''}`)
+          log('trade', `Bought: ${e.amount}× ${e.item}${e.cost !== undefined ? ` (${money(e.cost)})` : ''}`)
           break
         case 'daily':
           b.nextDailyAt = this.now() + DAY_MS
-          log('trade', `Récompense quotidienne : ${e.reward}`)
+          log('trade', `Daily reward: ${e.reward}`)
           break
         case 'quests':
           b.quests = e.quests.map((q) => ({ ...q }))
           break
         case 'captcha':
           s.captchas++
-          log('system', 'Captcha détecté', true)
+          log('system', 'Captcha detected', true)
           break
         case 'captchaSolved':
-          log('system', 'Captcha résolu')
+          log('system', 'Captcha solved')
           break
         case 'captchaFailed':
-          log('system', `Captcha échoué : ${e.text}`)
+          log('system', `Captcha failed: ${e.text}`)
           break
         case 'error':
           log('error', e.text)
@@ -191,8 +192,8 @@ export class GameState {
   private mutate(fn: (b: Body, log: LogFn) => void): void {
     const before = structuredClone(this.body)
     const added: LogEntry[] = []
-    fn(this.body, (type, text, highlight) => {
-      const entry: LogEntry = { id: this.nextId++, at: this.now(), type, text }
+    fn(this.body, (type, text, highlight, extra) => {
+      const entry: LogEntry = { id: this.nextId++, at: this.now(), type, text, ...extra }
       if (highlight) entry.highlight = true
       added.push(entry)
     })

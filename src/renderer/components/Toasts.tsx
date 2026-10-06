@@ -25,7 +25,7 @@ function ToastItem({ toast }: { toast: Toast }): JSX.Element {
       <button
         type="button"
         onClick={() => dismiss(toast.id)}
-        aria-label="Fermer la notification"
+        aria-label="Dismiss notification"
         className={`-m-1 rounded-md p-1 text-slate-400 transition hover:text-white ${focusRing}`}
       >
         <X className="h-3.5 w-3.5" aria-hidden />

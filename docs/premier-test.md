@@ -14,8 +14,8 @@ Deux options :
 
 ## 2. Se connecter
 
-1. Lis l'avertissement, coche « J'ai compris les risques ».
-2. Colle ton token (l'aide « Comment trouver mon token ? » est dans l'écran). Il est chiffré par Windows et reste sur ton PC.
+1. Lis l'avertissement, coche « I understand the risks ».
+2. Colle ton token (l'aide « How do I find my token? » est dans l'écran). Il est chiffré par Windows et reste sur ton PC.
 3. Tu dois voir ton avatar + pseudo.
 
 ## 3. Choisir le serveur et le salon
@@ -25,16 +25,16 @@ Deux options :
 
 ## 4. Activer le mode capture (important)
 
-Avant de démarrer : **Réglages → Avancé → Mode capture : ON**.
+Avant de démarrer : **Settings → Advanced → Capture mode : ON**.
 Ça enregistre chaque réponse du bot dans `%APPDATA%\virtual-autofisher\captures\`. J'en ai besoin pour caler la lecture des messages (pour l'instant elle est basée sur des exemples reconstitués, pas sur de vrais messages).
 
 ## 5. Session de test (~10 min)
 
-1. Clique **▶ Démarrer** et observe le dashboard : prises qui défilent, cooldown, solde.
+1. Clique **▶ Start** et observe le dashboard : prises qui défilent, cooldown, solde.
 2. Utilise les boutons rapides au moins une fois chacun : `/sell all`, `/profile`, `/daily`, `/quests`, `/boosts`.
 3. Clique une commande pendant le cooldown (pour capturer le message « wait »).
-4. Si un **captcha** apparaît : la pêche se fige, une notification Windows s'affiche. Tape le code dans le panneau → *Valider*. Si c'est une fausse alerte : *Arrêter la pêche*.
-5. Teste aussi : ⏸ Pause / ▶ Reprendre, fermer la fenêtre (elle va dans la barre système, près de l'horloge), *Quitter* depuis l'icône de la barre système.
+4. Si un **captcha** apparaît : la pêche se fige, une notification Windows s'affiche. Tape le code dans le panneau → *Submit*. Si c'est une fausse alerte : *Stop fishing*.
+5. Teste aussi : ⏸ Pause / ▶ Resume, fermer la fenêtre (elle va dans la barre système, près de l'horloge), *Quit* depuis l'icône de la barre système.
 
 ## 6. Ce que tu me renvoies
 
@@ -57,7 +57,7 @@ La police de l'interface est **Inter** (comme prévu dans la spec). Elle n'est p
 
 | Problème | Que faire |
 |---|---|
-| « Token invalide ou expiré » | Re-récupère le token (il change si tu te déconnectes de Discord). |
+| « Invalid or expired token » | Re-récupère le token (il change si tu te déconnectes de Discord). |
 | Le serveur est grisé | Virtual Fisher n'y est pas détecté, choisis-en un autre. |
-| « Commande indisponible » | La commande VF n'existe pas dans ce serveur (ou a changé de nom), envoie-moi `app.log`. |
-| État « Erreur » | La raison s'affiche à côté de la pastille d'état, envoie-la-moi. |
+| « Command unavailable » | La commande VF n'existe pas dans ce serveur (ou a changé de nom), envoie-moi `app.log`. |
+| État « Error » | La raison s'affiche à côté de la pastille d'état, envoie-la-moi. |

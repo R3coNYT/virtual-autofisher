@@ -280,7 +280,7 @@ describe('Engine', () => {
     client.commands = client.commands.filter((c) => c.name !== 'fish')
     await engine.start(A)
     expect(engine.state).toBe('error')
-    expect(states.at(-1)?.info?.reason).toBe('Commande /fish introuvable dans ce serveur')
+    expect(states.at(-1)?.info?.reason).toBe('Command /fish not found in this server')
     expect(names()).toEqual([])
   })
 
@@ -654,7 +654,7 @@ describe('Engine: cooldown replies', () => {
     // fishing kept its normal pace (≈ every 3 s), it was not pushed back by the daily's cooldown
     expect(names().filter((n) => n === 'fish').length).toBeGreaterThanOrEqual(15)
     expect(engine.state).toBe('running')
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('/daily en recharge'))
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('/daily on cooldown'))
 
     cfg.fishing.baseCooldownSec = 600 // fewer fish over the next 20 h
     const rearmAt = 2_500 + (20 * 60 + 12) * 60_000 + 180_000 // daily sent at 2.5 s; + wait + 3 min (rand 0.5 of 1–5)
@@ -782,7 +782,7 @@ describe('Engine: leaving a captcha', () => {
     client.emitBot(CAPTCHA)
     client.emitBot(SOLVED)
     expect(engine.state).toBe('captcha')
-    expect(states.at(-1)?.info).toMatchObject({ captchaSolved: true, captchaText: expect.stringMatching(/résolu/) })
+    expect(states.at(-1)?.info).toMatchObject({ captchaSolved: true, captchaText: expect.stringMatching(/solved/) })
     expect(engine.stateInfo.captchaSolved).toBe(true)
     engine.submitCaptcha('again')
     await tick(3_000)
@@ -909,7 +909,7 @@ describe('Engine: graceful stop', () => {
     await tick(60 * 60_000 + 15_000)
     expect(states.some((x) => x.s === 'stopping')).toBe(true)
     expect(engine.state).toBe('idle')
-    expect(states.at(-1)).toEqual({ s: 'idle', info: { reason: 'Limite de session atteinte' } })
+    expect(states.at(-1)).toEqual({ s: 'idle', info: { reason: 'Session limit reached' } })
     expect(names().slice(-2)).toEqual(['profile', 'quests'])
   })
 
@@ -977,7 +977,7 @@ describe('Engine: real captures', () => {
     client.emitBot(realForEngine('catch-levelup-quest'))
     await tick(2_500)
     expect(names()).toEqual(['fish', 'quests'])
-    expect(state.snapshot().log.some((l) => l.highlight && l.text === 'Quête terminée : Daily Level-ups Tier 3')).toBe(true)
+    expect(state.snapshot().log.some((l) => l.highlight && l.text === 'Quest completed: Daily Level-ups Tier 3')).toBe(true)
     expect(state.snapshot().session.rareCaught.gold).toBe(6)
   })
 

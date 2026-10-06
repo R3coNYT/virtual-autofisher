@@ -62,6 +62,6 @@ describe('FakeDiscordClient', () => {
     const f = new FakeDiscordClient()
     await expect(f.login('t')).resolves.toEqual({ id: 'me', username: 'tester', avatarUrl: '' })
     f.failLogin = true
-    await expect(f.login('t')).rejects.toThrow('Token invalide ou expiré')
+    await expect(f.login('t')).rejects.toThrow('Invalid or expired token')
   })
 })

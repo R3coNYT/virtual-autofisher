@@ -7,7 +7,7 @@ import { RareFishGrid } from '../components/RareFishGrid'
 import { SidePanel } from '../components/SidePanel'
 import { StatCard } from '../components/StatCard'
 import { TopBar } from '../components/TopBar'
-import { catchesPerHour, formatMoney } from '../format'
+import { catchesPerHour, formatInt, formatMoney } from '../format'
 import { useStore } from '../store'
 import { useNow } from '../useNow'
 
@@ -18,7 +18,7 @@ function signed(n: number): string {
 function RateCard({ catches, startedAt }: { catches: number; startedAt: number | null }): JSX.Element {
   const now = useNow()
   const rate = catchesPerHour(catches, startedAt, now)
-  return <StatCard label="Prises" value={catches} sub={rate != null ? `${rate} / h` : '— / h'} />
+  return <StatCard label="Catches" value={formatInt(catches)} sub={rate != null ? `${formatInt(rate)} / h` : '— / h'} />
 }
 
 export default function Dashboard(): JSX.Element {
@@ -31,7 +31,7 @@ export default function Dashboard(): JSX.Element {
   const log = useStore((s) => s.log)
   const compact = useStore((s) => s.config.ui.compactLog)
   const baseCooldownSec = useStore((s) => s.config.fishing.baseCooldownSec)
-  const sessionMoney = `${signed(session.moneyEarned)} cette session`
+  const sessionMoney = `${signed(session.moneyEarned)} this session`
 
   return (
     <Background>
@@ -41,24 +41,24 @@ export default function Dashboard(): JSX.Element {
         <main className="flex min-h-0 flex-1 flex-col gap-3 p-5">
           <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-4">
             <StatCard
-              label="Solde"
+              label="Balance"
               value={formatMoney(account.balance)}
-              sub={account.fishValue != null ? `Poissons : ${formatMoney(account.fishValue)}` : sessionMoney}
+              sub={account.fishValue != null ? `Fish: ${formatMoney(account.fishValue)}` : sessionMoney}
             >
               {account.fishValue != null && <p className="mt-0.5 truncate text-xs text-slate-400">{sessionMoney}</p>}
             </StatCard>
             <StatCard
-              label="Niveau"
+              label="Level"
               value={account.level ?? '—'}
               sub={
                 account.xpToNext != null
-                  ? `${account.xpToNext.toLocaleString('fr-FR')} XP avant le niveau ${(account.level ?? 0) + 1}`
+                  ? `${formatInt(account.xpToNext)} XP to level ${(account.level ?? 0) + 1}`
                   : undefined
               }
             />
             <RateCard catches={session.catches} startedAt={session.startedAt} />
             <StatCard
-              label="Prochain /fish"
+              label="Next /fish"
               aside={<CooldownRing nextFishAt={nextFishAt} fallbackMs={baseCooldownSec * 1000} />}
             />
           </div>

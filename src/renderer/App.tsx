@@ -24,7 +24,7 @@ function Screen(): JSX.Element {
     default:
       return (
         <Background>
-          <Splash label={message ? `${message} — nouvel essai…` : undefined} />
+          <Splash label={message ? `${message} — retrying…` : undefined} />
         </Background>
       )
   }

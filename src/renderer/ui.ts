@@ -7,5 +7,5 @@ export const primaryButton = `inline-flex items-center justify-center gap-2 roun
 export function cleanError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e)
   const msg = raw.replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '').trim()
-  return msg || 'Une erreur est survenue. Réessayez.'
+  return msg || 'Something went wrong. Please try again.'
 }

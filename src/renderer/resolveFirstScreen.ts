@@ -5,7 +5,7 @@ export type FirstScreen =
   | { screen: 'splash'; message?: string }
   | { screen: 'picker' | 'dashboard' }
 
-export const INVALID_TOKEN_MESSAGE = 'Token invalide ou expiré'
+export const INVALID_TOKEN_MESSAGE = 'Invalid or expired token'
 
 /**
  * Decides where to land from the auth state. Onboarding is only shown when there is no stored

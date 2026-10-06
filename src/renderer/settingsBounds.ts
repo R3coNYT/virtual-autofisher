@@ -79,7 +79,7 @@ export function commandMissing(commands: { name: string }[], name: string): bool
 }
 
 /**
- * "Nouvelle image" is offered when /verify exists and either exposes a 'regen' choice or takes a
+ * "New image" is offered when /verify exists and either exposes a 'regen' choice or takes a
  * free string first option (the bot accepts the answer 'regen' there).
  */
 export function canRegen(commands: Pick<SlashCommandInfo, 'name' | 'options'>[]): boolean {

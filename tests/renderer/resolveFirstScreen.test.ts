@@ -17,16 +17,16 @@ describe('resolveFirstScreen', () => {
     expect(resolveFirstScreen({ ...base, hasToken: true, connection: { status: 'connecting' } }).screen).toBe('splash')
   })
   it('token + network disconnected -> splash with message', () => {
-    const connection = { status: 'disconnected' as const, message: 'Connexion à Discord impossible' }
+    const connection = { status: 'disconnected' as const, message: 'Unable to connect to Discord' }
     expect(resolveFirstScreen({ ...base, hasToken: true, connection })).toEqual({
       screen: 'splash',
-      message: 'Connexion à Discord impossible'
+      message: 'Unable to connect to Discord'
     })
   })
   it('invalidToken -> onboarding with error', () => {
     expect(resolveFirstScreen({ ...base, connection: { status: 'invalidToken' } })).toEqual({
       screen: 'onboarding',
-      error: 'Token invalide ou expiré'
+      error: 'Invalid or expired token'
     })
   })
   it('user + target -> dashboard; user without target -> picker', () => {

@@ -20,6 +20,6 @@ describe('orderSlashArgs', () => {
     expect(orderSlashArgs(info, { note: 'x', item: 'a' })).toEqual(['a', undefined, 'x'])
   })
   it('throws on an unknown option', () => {
-    expect(() => orderSlashArgs(info, { bogus: 1 })).toThrow('Option inconnue : bogus')
+    expect(() => orderSlashArgs(info, { bogus: 1 })).toThrow('Unknown option: bogus')
   })
 })

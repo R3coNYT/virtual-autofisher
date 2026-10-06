@@ -27,7 +27,7 @@ function ErrorBox({ message, onRetry }: { message: string; onRetry: () => void }
       <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
       <span className="flex-1">{message}</span>
       <button type="button" onClick={onRetry} className={`rounded-md px-2 py-1 font-medium text-white hover:bg-white/10 ${focusRing}`}>
-        Réessayer
+        Retry
       </button>
     </div>
   )
@@ -123,12 +123,12 @@ export default function ServerPicker(): JSX.Element {
       <main className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 px-6 py-10">
         <header>
           <h1 className="text-xl font-semibold tracking-tight text-white">
-            {guild ? 'Choisissez un salon' : 'Choisissez un serveur'}
+            {guild ? 'Choose a channel' : 'Choose a server'}
           </h1>
           <p className="mt-1 text-sm text-slate-400">
             {guild
-              ? `Les commandes seront envoyées dans le salon choisi de ${guild.name}.`
-              : `${user ? `${user.username}, s` : 'S'}électionnez le serveur où se trouve Virtual Fisher.`}
+              ? `Commands will be sent to the chosen channel of ${guild.name}.`
+              : `${user ? `${user.username}, s` : 'S'}elect the server where Virtual Fisher is.`}
           </p>
         </header>
 
@@ -137,12 +137,12 @@ export default function ServerPicker(): JSX.Element {
             {guildError && <ErrorBox message={guildError} onRetry={loadGuilds} />}
             {!guildError && !sortedGuilds && (
               <div className="flex items-center gap-2 text-sm text-slate-400" role="status">
-                <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden /> Chargement des serveurs…
+                <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden /> Loading servers…
               </div>
             )}
             {sortedGuilds && sortedGuilds.length === 0 && (
               <p className="rounded-xl border border-white/10 bg-white/5 p-5 text-sm text-slate-400">
-                Aucun serveur trouvé sur ce compte.
+                No server found on this account.
               </p>
             )}
             {sortedGuilds && sortedGuilds.length > 0 && (
@@ -166,7 +166,7 @@ export default function ServerPicker(): JSX.Element {
                           Virtual Fisher
                         </span>
                       ) : (
-                        <span className="text-[11px] text-slate-500">Virtual Fisher absent</span>
+                        <span className="text-[11px] text-slate-500">No Virtual Fisher</span>
                       )}
                     </button>
                   </li>
@@ -182,7 +182,7 @@ export default function ServerPicker(): JSX.Element {
               <button
                 type="button"
                 onClick={back}
-                aria-label="Retour aux serveurs"
+                aria-label="Back to servers"
                 className={`rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white ${focusRing}`}
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -197,8 +197,8 @@ export default function ServerPicker(): JSX.Element {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher un salon"
-                aria-label="Rechercher un salon"
+                placeholder="Search a channel"
+                aria-label="Search a channel"
                 className={`w-full rounded-xl border border-white/10 bg-black/20 py-2.5 pl-10 pr-3.5 text-sm text-white placeholder:text-slate-500 transition hover:border-white/20 focus:border-accent/60 ${focusRing}`}
               />
             </div>
@@ -206,15 +206,15 @@ export default function ServerPicker(): JSX.Element {
             {channelError && <ErrorBox message={channelError} onRetry={() => loadChannels(guild)} />}
             {!channelError && !channels && (
               <div className="flex items-center gap-2 text-sm text-slate-400" role="status">
-                <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden /> Chargement des salons…
+                <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden /> Loading channels…
               </div>
             )}
             {channels && (
               <ul
-                aria-label="Salons"
+                aria-label="Channels"
                 className="max-h-[22rem] divide-y divide-white/5 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur"
               >
-                {filtered.length === 0 && <li className="p-5 text-sm text-slate-400">Aucun salon ne correspond.</li>}
+                {filtered.length === 0 && <li className="p-5 text-sm text-slate-400">No matching channel.</li>}
                 {filtered.map((c) => {
                   const selected = c.id === channelId
                   return (
@@ -246,7 +246,7 @@ export default function ServerPicker(): JSX.Element {
             <div className="flex justify-end">
               <button type="button" onClick={() => void confirm()} disabled={!channelId || saving} className={primaryButton}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-                Utiliser ce salon
+                Use this channel
               </button>
             </div>
           </section>

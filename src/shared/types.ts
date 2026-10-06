@@ -12,7 +12,7 @@ export type EngineState = 'idle' | 'connecting' | 'running' | 'paused' | 'restin
 export type PauseReason = 'user' | 'network' | 'noResponse' | 'exception'
 /** Detail sent with each engine state: pause/error/stop reason, captcha content. */
 export type EngineInfo = {
-  /** paused: a PauseReason code; error / idle (session limit): a French message. */
+  /** paused: a PauseReason code; error / idle (session limit): a message for the user. */
   reason?: string
   captchaImageUrl?: string
   captchaText?: string
@@ -96,6 +96,8 @@ export type LogEntry = {
   type: 'catch' | 'trade' | 'system' | 'error' | 'unknown'
   text: string
   highlight?: boolean
+  /** Set on the "Reached level N!" entry (structured, for notifications). */
+  levelUp?: number
 }
 
 export type GameSnapshot = {

@@ -8,7 +8,7 @@ import { randomBetweenMs } from './humanize'
 
 type Info = Pick<EngineInfo, 'captchaImageUrl' | 'captchaText' | 'captchaSolved'>
 
-export const CAPTCHA_SOLVED_TEXT = 'Captcha résolu — reprise dans quelques secondes…'
+export const CAPTCHA_SOLVED_TEXT = 'Captcha solved — resuming in a few seconds…'
 
 export type CaptchaDeps = {
   queue: CommandQueue
@@ -88,7 +88,7 @@ export class CaptchaFlow {
   private enter(ev: Extract<GameEvent, { kind: 'captcha' }>): void {
     const st = this.d.getState()
     if (!WATCHED.includes(st)) {
-      this.d.logger.warn(`Captcha reçu dans l'état ${st}, ignoré`)
+      this.d.logger.warn(`Captcha received in state ${st}, ignored`)
       return
     }
     // Safety first: nothing queued survives, nothing new gets in.
@@ -105,7 +105,7 @@ export class CaptchaFlow {
   private pushVerify(answer: string): void {
     if (this.d.getState() !== 'captcha' || this.info.captchaSolved) return
     const verify = this.d.commands().find((c) => c.name === 'verify')
-    if (!verify) return this.d.logger.warn('Commande /verify introuvable dans ce serveur')
+    if (!verify) return this.d.logger.warn('Command /verify not found in this server')
     this.d.queue.push({ name: 'verify', options: positionalOptions(verify, [answer]), priority: 'verify', key: 'verify' })
   }
 

@@ -15,10 +15,10 @@ export function CooldownRing({ nextFishAt, fallbackMs }: { nextFishAt: number | 
   }
   const remaining = nextFishAt == null ? null : Math.max(0, nextFishAt - now)
   const ratio = remaining == null ? 0 : Math.min(1, remaining / total.current.ms)
-  const label = remaining == null ? '—' : remaining === 0 ? 'Prêt' : `${(remaining / 1000).toFixed(1).replace('.', ',')} s`
+  const label = remaining == null ? '—' : remaining === 0 ? 'Ready' : `${(remaining / 1000).toFixed(1)}s`
 
   return (
-    <div className="relative h-16 w-16 shrink-0" role="img" aria-label={`Prochain /fish : ${label}`}>
+    <div className="relative h-16 w-16 shrink-0" role="img" aria-label={`Next /fish: ${label}`}>
       <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90" aria-hidden>
         <circle cx="32" cy="32" r={R} fill="none" strokeWidth="5" className="stroke-white/10" />
         <circle

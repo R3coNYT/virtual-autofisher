@@ -7,9 +7,9 @@ export function BoostChips({ boosts }: { boosts: GameSnapshot['boosts'] }): JSX.
   const now = useNow()
   const active = boosts.filter((b) => b.endsAt > now)
   return (
-    <section aria-label="Boosts actifs" className="flex flex-wrap items-center gap-2">
+    <section aria-label="Active boosts" className="flex flex-wrap items-center gap-2">
       <h3 className="text-xs font-medium uppercase tracking-wide text-slate-400">Boosts</h3>
-      {active.length === 0 && <span className="text-xs text-slate-500">Aucun boost actif</span>}
+      {active.length === 0 && <span className="text-xs text-slate-500">No active boost</span>}
       {active.map((b) => (
         <span
           key={b.name}

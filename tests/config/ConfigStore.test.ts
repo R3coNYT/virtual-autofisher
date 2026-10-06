@@ -50,7 +50,7 @@ describe('ConfigStore', () => {
   it('setToken lève si chiffrement indisponible', () => {
     const s = new ConfigStore(tmp(), fakeCipher(false))
     s.load()
-    expect(() => s.setToken('abc')).toThrow('Chiffrement indisponible')
+    expect(() => s.setToken('abc')).toThrow('Encryption unavailable')
   })
   it('getToken retourne null si le déchiffrement échoue', () => {
     const dir = tmp()

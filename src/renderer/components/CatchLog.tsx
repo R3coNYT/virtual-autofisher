@@ -7,10 +7,10 @@ import { cardCls } from './StatCard'
 
 const PAGE = 200
 const FILTERS: { id: LogFilter; label: string }[] = [
-  { id: 'all', label: 'Tout' },
-  { id: 'catch', label: 'Prises' },
-  { id: 'trade', label: 'Achats/ventes' },
-  { id: 'system', label: 'Système' }
+  { id: 'all', label: 'All' },
+  { id: 'catch', label: 'Catches' },
+  { id: 'trade', label: 'Trades' },
+  { id: 'system', label: 'System' }
 ]
 const TYPE_CLS: Record<LogEntry['type'], string> = {
   catch: 'text-slate-200',
@@ -20,7 +20,7 @@ const TYPE_CLS: Record<LogEntry['type'], string> = {
   unknown: 'text-slate-500'
 }
 
-const time = (at: number): string => new Date(at).toLocaleTimeString('fr-FR')
+const time = (at: number): string => new Date(at).toLocaleTimeString('en-US', { hour12: false })
 
 export const CatchLog = memo(function CatchLog({ log, compact }: { log: LogEntry[]; compact: boolean }): JSX.Element {
   const [filter, setFilter] = useState<LogFilter>('all')
@@ -55,10 +55,10 @@ export const CatchLog = memo(function CatchLog({ log, compact }: { log: LogEntry
   }
 
   return (
-    <section className={`${cardCls} flex h-full min-h-0 flex-col overflow-hidden`} aria-label="Journal des prises">
+    <section className={`${cardCls} flex h-full min-h-0 flex-col overflow-hidden`} aria-label="Catch log">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5">
-        <h3 className="text-sm font-semibold text-white">Journal</h3>
-        <div role="group" aria-label="Filtrer le journal" className="flex gap-1">
+        <h3 className="text-sm font-semibold text-white">Log</h3>
+        <div role="group" aria-label="Filter the log" className="flex gap-1">
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -85,10 +85,10 @@ export const CatchLog = memo(function CatchLog({ log, compact }: { log: LogEntry
             onClick={() => setLimit((l) => l + PAGE)}
             className={`mx-auto my-2 block rounded-lg border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/10 ${focusRing}`}
           >
-            Voir plus ({hidden})
+            Show more ({hidden})
           </button>
         )}
-        {shown.length === 0 && <p className="p-4 text-sm text-slate-500">Aucune entrée pour le moment.</p>}
+        {shown.length === 0 && <p className="p-4 text-sm text-slate-500">No entries yet.</p>}
         <ul>
           {shown.map((e) => (
             <li

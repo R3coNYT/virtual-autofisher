@@ -41,7 +41,7 @@ function Row({ label, help, missing, children }: { label: string; help?: string;
         {help && <p className="text-xs text-slate-500">{help}</p>}
         {missing && (
           <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-300">
-            <AlertCircle className="h-3 w-3 shrink-0" aria-hidden /> Commande indisponible
+            <AlertCircle className="h-3 w-3 shrink-0" aria-hidden /> Command unavailable
           </p>
         )}
       </div>
@@ -70,7 +70,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   )
 }
 
-const fmt = (n: number): string => String(n).replace('.', ',')
+const fmt = (n: number): string => String(n)
 
 /** Number input committed on blur / Enter (not on every keystroke), clamped to [min, max]. */
 function NumField(props: {
@@ -180,7 +180,7 @@ function AccountSection(): JSX.Element {
       const me = await window.api.auth.setToken(token.trim())
       const s = useStore.getState()
       s.setUser(me)
-      s.pushToast({ level: 'success', message: `Token mis à jour : connecté en tant que ${me.username}. Relancez la pêche.` })
+      s.pushToast({ level: 'success', message: `Token updated: logged in as ${me.username}. Start fishing again.` })
       setToken('')
       setEditing(false)
     } catch (err) {
@@ -206,19 +206,19 @@ function AccountSection(): JSX.Element {
   }
 
   return (
-    <Section title="Compte">
-      <Row label={user ? `Connecté en tant que ${user.username}` : 'Compte Discord'} help="Le token reste chiffré sur cet ordinateur.">
+    <Section title="Account">
+      <Row label={user ? `Logged in as ${user.username}` : 'Discord account'} help="The token stays encrypted on this computer.">
         <button type="button" onClick={() => setEditing((v) => !v)} aria-expanded={editing} className={secondaryButton}>
-          Changer de token
+          Change token
         </button>
         <button type="button" onClick={() => void logout()} disabled={busy} className={secondaryButton}>
-          <LogOut className="h-4 w-4" aria-hidden /> Se déconnecter
+          <LogOut className="h-4 w-4" aria-hidden /> Log out
         </button>
       </Row>
       {editing && (
         <form onSubmit={changeToken} className="space-y-3 py-3" noValidate>
           <label htmlFor={tokenId} className="block text-sm text-slate-200">
-            Nouveau token Discord
+            New Discord token
           </label>
           <div className="relative">
             <input
@@ -228,13 +228,13 @@ function AccountSection(): JSX.Element {
               onChange={(e) => setToken(e.target.value)}
               autoComplete="off"
               spellCheck={false}
-              placeholder="Collez le nouveau token ici"
+              placeholder="Paste the new token here"
               className={`${inputCls} w-full py-2.5 pr-11 font-mono`}
             />
             <button
               type="button"
               onClick={() => setShow((v) => !v)}
-              aria-label={show ? 'Masquer le token' : 'Afficher le token'}
+              aria-label={show ? 'Hide the token' : 'Show the token'}
               aria-pressed={show}
               className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white ${focusRing}`}
             >
@@ -249,9 +249,9 @@ function AccountSection(): JSX.Element {
           )}
           <button type="submit" disabled={!token.trim() || busy} className={primaryButton}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-            {busy ? 'Vérification…' : 'Valider le token'}
+            {busy ? 'Checking…' : 'Save token'}
           </button>
-          <p className="text-xs text-slate-500">La pêche en cours est arrêtée une fois le nouveau token accepté.</p>
+          <p className="text-xs text-slate-500">Fishing in progress is stopped once the new token is accepted.</p>
         </form>
       )}
     </Section>
@@ -279,51 +279,51 @@ export default function Settings(): JSX.Element {
       <main className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 px-6 py-6">
         <header className="flex items-center gap-3">
           <button type="button" onClick={() => goto('dashboard')} className={secondaryButton}>
-            <ArrowLeft className="h-4 w-4" aria-hidden /> Retour
+            <ArrowLeft className="h-4 w-4" aria-hidden /> Back
           </button>
-          <h1 className="text-xl font-semibold tracking-tight text-white">Réglages</h1>
-          <p className="ml-auto text-xs text-slate-500">Appliqués immédiatement</p>
+          <h1 className="text-xl font-semibold tracking-tight text-white">Settings</h1>
+          <p className="ml-auto text-xs text-slate-500">Applied immediately</p>
         </header>
 
-        <Section title="Pêche">
-          <Row label="Délai de base entre deux /fish" help="Minimum 2 s">
-            <NumField label="Délai de base" value={fishing.baseCooldownSec} {...BOUNDS.baseCooldownSec} unit="s" onCommit={(n) => void save({ fishing: { baseCooldownSec: n } })} />
+        <Section title="Fishing">
+          <Row label="Base delay between two /fish" help="Minimum 2s">
+            <NumField label="Base delay" value={fishing.baseCooldownSec} {...BOUNDS.baseCooldownSec} unit="s" onCommit={(n) => void save({ fishing: { baseCooldownSec: n } })} />
           </Row>
-          <Row label="Variation aléatoire (±)" help="De 0 à 5 s">
-            <NumField label="Variation aléatoire" value={fishing.jitterSec} {...BOUNDS.jitterSec} unit="s" onCommit={(n) => void save({ fishing: { jitterSec: n } })} />
+          <Row label="Random variation (±)" help="From 0 to 5s">
+            <NumField label="Random variation" value={fishing.jitterSec} {...BOUNDS.jitterSec} unit="s" onCommit={(n) => void save({ fishing: { jitterSec: n } })} />
           </Row>
-          <Row label="Écart minimum entre deux commandes" help="Toutes commandes confondues, minimum 2 s">
-            <NumField label="Écart minimum" value={fishing.minGapSec} {...BOUNDS.minGapSec} unit="s" onCommit={(n) => void save({ fishing: { minGapSec: n } })} />
+          <Row label="Minimum gap between two commands" help="All commands combined, minimum 2s">
+            <NumField label="Minimum gap" value={fishing.minGapSec} {...BOUNDS.minGapSec} unit="s" onCommit={(n) => void save({ fishing: { minGapSec: n } })} />
           </Row>
         </Section>
 
-        <Section title="Vente">
-          <Row label="Vente automatique (/sell all)" missing={missing('sell')}>
-            <Toggle label="Vente automatique" checked={sell.enabled} onChange={(v) => void save({ sell: { enabled: v } })} />
+        <Section title="Selling">
+          <Row label="Auto sell (/sell all)" missing={missing('sell')}>
+            <Toggle label="Auto sell" checked={sell.enabled} onChange={(v) => void save({ sell: { enabled: v } })} />
           </Row>
-          <Row label="Déclencheur">
+          <Row label="Trigger">
             <Segmented
-              label="Déclencheur de vente"
+              label="Sell trigger"
               value={sell.mode}
               options={[
-                { value: 'catches', label: 'Prises' },
+                { value: 'catches', label: 'Catches' },
                 { value: 'minutes', label: 'Minutes' }
               ]}
               onChange={(v) => void save({ sell: { mode: v } })}
             />
           </Row>
-          <Row label={sell.mode === 'catches' ? 'Vendre toutes les N prises' : 'Vendre toutes les N minutes'} help="Minimum 1">
-            <NumField label="Valeur de N" value={sell.every} {...BOUNDS.sellEvery} integer onCommit={(n) => void save({ sell: { every: n } })} />
+          <Row label={sell.mode === 'catches' ? 'Sell every N catches' : 'Sell every N minutes'} help="Minimum 1">
+            <NumField label="Value of N" value={sell.every} {...BOUNDS.sellEvery} integer onCommit={(n) => void save({ sell: { every: n } })} />
           </Row>
         </Section>
 
-        <Section title="Buffs et appât">
-          <Row label="Buffs automatiques (fish + treasure)" missing={missing('buy')}>
-            <Toggle label="Buffs automatiques" checked={buffs.enabled} onChange={(v) => void save({ buffs: { enabled: v } })} />
+        <Section title="Buffs and bait">
+          <Row label="Auto buffs (fish + treasure)" missing={missing('buy')}>
+            <Toggle label="Auto buffs" checked={buffs.enabled} onChange={(v) => void save({ buffs: { enabled: v } })} />
           </Row>
-          <Row label="Durée des buffs">
+          <Row label="Buff length">
             <Segmented
-              label="Durée des buffs"
+              label="Buff length"
               value={buffs.lengthMin}
               options={[
                 { value: 5, label: '5 min' },
@@ -332,79 +332,79 @@ export default function Settings(): JSX.Element {
               onChange={(v) => void save({ buffs: { lengthMin: v } })}
             />
           </Row>
-          <Row label="Achat d'appât automatique" missing={missing('buy')}>
-            <Toggle label="Achat d'appât automatique" checked={bait.enabled} onChange={(v) => void save({ bait: { enabled: v } })} />
+          <Row label="Auto buy bait" missing={missing('buy')}>
+            <Toggle label="Auto buy bait" checked={bait.enabled} onChange={(v) => void save({ bait: { enabled: v } })} />
           </Row>
-          <Row label="Appât à acheter" help="Nom exact de l'appât dans /buy">
-            <TextField label="Nom de l'appât" value={bait.name} placeholder="ex. Worm" onCommit={(v) => void save({ bait: { name: v } })} />
+          <Row label="Bait to buy" help="Exact bait name in /buy">
+            <TextField label="Bait name" value={bait.name} placeholder="e.g. Worm" onCommit={(v) => void save({ bait: { name: v } })} />
           </Row>
-          <Row label="Quantité calculée automatiquement" help="Selon la durée des buffs et le délai de pêche">
-            <Toggle label="Quantité automatique" checked={bait.autoAmount} onChange={(v) => void save({ bait: { autoAmount: v } })} />
+          <Row label="Amount computed automatically" help="From the buff length and the fishing delay">
+            <Toggle label="Automatic amount" checked={bait.autoAmount} onChange={(v) => void save({ bait: { autoAmount: v } })} />
           </Row>
           {!bait.autoAmount && (
-            <Row label="Quantité par achat">
-              <NumField label="Quantité d'appât" value={bait.amount} {...BOUNDS.baitAmount} integer onCommit={(n) => void save({ bait: { amount: Math.round(n) } })} />
+            <Row label="Amount per purchase">
+              <NumField label="Bait amount" value={bait.amount} {...BOUNDS.baitAmount} integer onCommit={(n) => void save({ bait: { amount: Math.round(n) } })} />
             </Row>
           )}
         </Section>
 
-        <Section title="Profil, daily et quêtes">
-          <Row label="Actualiser le profil toutes les" help="Inventaire et statistiques, minimum 1 min" missing={missing('profile')}>
-            <NumField label="Intervalle du profil" value={profile.refreshMin} {...BOUNDS.refreshMin} unit="min" onCommit={(n) => void save({ profile: { refreshMin: n } })} />
+        <Section title="Profile, daily and quests">
+          <Row label="Refresh the profile every" help="Inventory and statistics, minimum 1 min" missing={missing('profile')}>
+            <NumField label="Profile interval" value={profile.refreshMin} {...BOUNDS.refreshMin} unit="min" onCommit={(n) => void save({ profile: { refreshMin: n } })} />
           </Row>
-          <Row label="Récompense quotidienne (/daily)" missing={missing('daily')}>
-            <Toggle label="Daily automatique" checked={daily.enabled} onChange={(v) => void save({ daily: { enabled: v } })} />
+          <Row label="Daily reward (/daily)" missing={missing('daily')}>
+            <Toggle label="Auto daily" checked={daily.enabled} onChange={(v) => void save({ daily: { enabled: v } })} />
           </Row>
-          <Row label="Suivi des quêtes (/quests)" help="Lecture seule : affichage dans le tableau de bord" missing={missing('quests')}>
-            <Toggle label="Suivi des quêtes" checked={quests.enabled} onChange={(v) => void save({ quests: { enabled: v } })} />
+          <Row label="Quest tracking (/quests)" help="Read only: shown on the dashboard" missing={missing('quests')}>
+            <Toggle label="Quest tracking" checked={quests.enabled} onChange={(v) => void save({ quests: { enabled: v } })} />
           </Row>
         </Section>
 
-        <Section title="Humanisation" hint="Pauses et limite de session, pour une activité moins régulière.">
-          <Row label="Pauses régulières">
-            <Toggle label="Pauses régulières" checked={breaks.enabled} onChange={(v) => void save({ breaks: { enabled: v } })} />
+        <Section title="Humanization" hint="Breaks and session limit, for a less regular activity.">
+          <Row label="Regular breaks">
+            <Toggle label="Regular breaks" checked={breaks.enabled} onChange={(v) => void save({ breaks: { enabled: v } })} />
           </Row>
-          <Row label="Pêche avant chaque pause">
-            <NumField label="Durée de pêche" value={breaks.workMin} {...BOUNDS.breakMin} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workMin: n } })} />
-            <NumField label="Variation de la durée de pêche" value={breaks.workJitterMin} {...BOUNDS.breakMin} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workJitterMin: n } })} />
+          <Row label="Fishing before each break">
+            <NumField label="Fishing time" value={breaks.workMin} {...BOUNDS.breakMin} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workMin: n } })} />
+            <NumField label="Fishing time variation" value={breaks.workJitterMin} {...BOUNDS.breakMin} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { workJitterMin: n } })} />
           </Row>
-          <Row label="Durée d'une pause">
-            <NumField label="Durée de pause" value={breaks.restMin} {...BOUNDS.breakMin} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restMin: n } })} />
-            <NumField label="Variation de la durée de pause" value={breaks.restJitterMin} {...BOUNDS.breakMin} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restJitterMin: n } })} />
+          <Row label="Break length">
+            <NumField label="Break length" value={breaks.restMin} {...BOUNDS.breakMin} unit="min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restMin: n } })} />
+            <NumField label="Break length variation" value={breaks.restJitterMin} {...BOUNDS.breakMin} unit="± min" disabled={!breaks.enabled} onCommit={(n) => void save({ breaks: { restJitterMin: n } })} />
           </Row>
-          <Row label="Arrêt automatique après" help="0 = pas de limite">
-            <NumField label="Limite de session" value={cfg.sessionLimitH} {...BOUNDS.sessionLimitH} unit="h" onCommit={(n) => void save({ sessionLimitH: n })} />
+          <Row label="Stop automatically after" help="0 = no limit">
+            <NumField label="Session limit" value={cfg.sessionLimitH} {...BOUNDS.sessionLimitH} unit="h" onCommit={(n) => void save({ sessionLimitH: n })} />
           </Row>
         </Section>
 
         <Section title="Notifications">
-          <Row label="Notification de captcha">
-            <Toggle label="Notification de captcha" checked={notifications.captcha} onChange={(v) => void save({ notifications: { captcha: v } })} />
+          <Row label="Captcha notification">
+            <Toggle label="Captcha notification" checked={notifications.captcha} onChange={(v) => void save({ notifications: { captcha: v } })} />
           </Row>
-          <Row label="Son avec la notification">
-            <Toggle label="Son" checked={notifications.sound} onChange={(v) => void save({ notifications: { sound: v } })} />
+          <Row label="Sound with the notification">
+            <Toggle label="Sound" checked={notifications.sound} onChange={(v) => void save({ notifications: { sound: v } })} />
           </Row>
-          <Row label="Niveau supérieur">
-            <Toggle label="Notification de niveau" checked={notifications.levelUp} onChange={(v) => void save({ notifications: { levelUp: v } })} />
+          <Row label="Level up">
+            <Toggle label="Level-up notification" checked={notifications.levelUp} onChange={(v) => void save({ notifications: { levelUp: v } })} />
           </Row>
-          <Row label="Poisson rare">
-            <Toggle label="Notification de poisson rare" checked={notifications.rareFish} onChange={(v) => void save({ notifications: { rareFish: v } })} />
+          <Row label="Rare fish">
+            <Toggle label="Rare fish notification" checked={notifications.rareFish} onChange={(v) => void save({ notifications: { rareFish: v } })} />
           </Row>
         </Section>
 
         <AccountSection />
 
-        <Section title="Avancé">
-          <Row label="Fermer la fenêtre réduit l'app dans la barre système" help="Quitter se fait par le menu de l'icône (clic droit)">
-            <Toggle label="Réduire dans la barre système" checked={cfg.ui.closeToTray} onChange={(v) => void save({ ui: { closeToTray: v } })} />
+        <Section title="Advanced">
+          <Row label="Closing the window minimizes the app to the system tray" help="Quit from the tray icon menu (right click)">
+            <Toggle label="Minimize to the system tray" checked={cfg.ui.closeToTray} onChange={(v) => void save({ ui: { closeToTray: v } })} />
           </Row>
           <Row
-            label="Mode capture"
-            help="Enregistre les messages bruts du bot dans le dossier « captures » des données (%APPDATA%\virtual-autofisher\captures), pour améliorer la reconnaissance. Ils peuvent contenir votre pseudo."
+            label="Capture mode"
+            help="Saves the bot's raw messages in the data folder's captures directory (%APPDATA%\virtual-autofisher\captures), to improve recognition. They may contain your username."
           >
-            <Toggle label="Mode capture" checked={cfg.capture} onChange={(v) => void save({ capture: v })} />
+            <Toggle label="Capture mode" checked={cfg.capture} onChange={(v) => void save({ capture: v })} />
           </Row>
-          <Row label="Dossier de données" help="Configuration, journaux, résumés de session et captures">
+          <Row label="Data folder" help="Configuration, logs, session summaries and captures">
             <button
               type="button"
               onClick={() =>
@@ -412,7 +412,7 @@ export default function Settings(): JSX.Element {
               }
               className={secondaryButton}
             >
-              <FolderOpen className="h-4 w-4" aria-hidden /> Ouvrir le dossier de données
+              <FolderOpen className="h-4 w-4" aria-hidden /> Open the data folder
             </button>
           </Row>
         </Section>

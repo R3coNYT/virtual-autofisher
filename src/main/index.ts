@@ -18,7 +18,7 @@ process.on('uncaughtException', (e) => logger.error('uncaughtException', e))
 process.on('unhandledRejection', (e) => {
   // the library posts interactions without awaiting them: name the slash command that was just sent
   const last = client?.lastSlash
-  const ctx = last && Date.now() - last.at < 30_000 ? ` (après /${last.command})` : ''
+  const ctx = last && Date.now() - last.at < 30_000 ? ` (after /${last.command})` : ''
   logger.error(`unhandledRejection${ctx}`, e)
 })
 
@@ -138,7 +138,7 @@ function boot(): void {
         lastRare = { ...lastRare, ...rare }
       }
     } catch (e) {
-      logger.error('Notification impossible', e) // must never reach (and pause) the engine
+      logger.error('Notification failed', e) // must never reach (and pause) the engine
     }
   })
 

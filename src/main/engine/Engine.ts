@@ -164,7 +164,7 @@ export class Engine {
     try {
       if (this.current === 'captcha') {
         // never drop an unsolved captcha by switching channel
-        return this.logger.warn('Démarrage refusé : un captcha doit être résolu')
+        return this.logger.warn('Start refused: a captcha must be solved first')
       }
       if (this.current !== 'idle' && this.current !== 'error') {
         if (this.target?.guildId === target.guildId && this.target.channelId === target.channelId) return
@@ -180,12 +180,12 @@ export class Engine {
         cmds = await this.client.getBotCommands(target.guildId)
       } catch (err) {
         if (gen !== this.gen) return
-        this.logger.error('Récupération des commandes Virtual Fisher impossible', err)
-        return this.toError('Impossible de récupérer les commandes de Virtual Fisher')
+        this.logger.error('Unable to fetch the Virtual Fisher commands', err)
+        return this.toError('Unable to fetch the Virtual Fisher commands')
       }
       if (gen !== this.gen) return // stopped or restarted meanwhile
       this.commands = cmds
-      if (!cmds.some((c) => c.name === 'fish')) return this.toError('Commande /fish introuvable dans ce serveur')
+      if (!cmds.some((c) => c.name === 'fish')) return this.toError('Command /fish not found in this server')
 
       this.failures = 0
       this.awaiting = null
@@ -206,8 +206,8 @@ export class Engine {
       this.queue.resume()
       this.scheduler.start()
     } catch (err) {
-      this.logger.error('Démarrage du moteur impossible', err)
-      this.toError('Erreur inattendue au démarrage')
+      this.logger.error('Unable to start the engine', err)
+      this.toError('Unexpected error while starting')
     }
   }
 
@@ -252,8 +252,8 @@ export class Engine {
 
   /** User-typed command. Queued while paused/resting; refused in any other state (captcha included). */
   sendManual(name: string, options?: Record<string, string | number>): void {
-    if (!ACTIVE.includes(this.current)) return this.logger.warn(`Commande /${name} ignorée (état ${this.current})`)
-    if (!this.commands.some((c) => c.name === name)) return this.logger.warn(`Commande /${name} introuvable`)
+    if (!ACTIVE.includes(this.current)) return this.logger.warn(`Command /${name} ignored (state ${this.current})`)
+    if (!this.commands.some((c) => c.name === name)) return this.logger.warn(`Command /${name} not found`)
     this.queue.push({ name, options, priority: 'manual' })
   }
 
@@ -321,13 +321,13 @@ export class Engine {
       const again: QueuedCommand = { ...replyTo }
       this.deferred.add(again)
       this.scheduler.deferCommand(again, waitMs + randomBetweenMs(0.2, 1, this.rand))
-      return this.logger.info(`/${replyTo.name} en recharge : renvoyée dans ${wait}`)
+      return this.logger.info(`/${replyTo.name} on cooldown: sent again in ${wait}`)
     }
     const delay = waitMs + randomBetweenMs(60, 300, this.rand)
     if (this.scheduler.rearm(replyTo.key, delay)) {
-      this.logger.info(`/${replyTo.name} en recharge (${wait}) : reprogrammée dans ${formatWait(delay)}`)
+      this.logger.info(`/${replyTo.name} on cooldown (${wait}): rescheduled in ${formatWait(delay)}`)
     } else {
-      this.logger.info(`/${replyTo.name} en recharge (${wait}) : non renvoyée`)
+      this.logger.info(`/${replyTo.name} on cooldown (${wait}): not sent again`)
     }
   }
 
@@ -335,7 +335,7 @@ export class Engine {
     const key = replyTo?.priority === 'maintenance' ? replyTo.key : this.lastMaintenanceKey
     const what = key === 'bait' ? 'bait' : key?.startsWith('buff-') ? 'buff' : null
     if (!what) return
-    this.logger.warn(`Fonds insuffisants : achats ${what === 'bait' ? "d'appât" : 'de boosts'} suspendus 30 min`)
+    this.logger.warn(`Not enough money: ${what === 'bait' ? 'bait' : 'boost'} purchases suspended for 30 min`)
     this.scheduler.blockPurchases(what, NO_FUNDS_BLOCK_MS)
   }
 
@@ -348,7 +348,7 @@ export class Engine {
       return
     }
     if (!ACTIVE.includes(this.current)) return
-    if (cause !== 'timeout') this.logger.warn(`Envoi de /${c.name} impossible`, cause)
+    if (cause !== 'timeout') this.logger.warn(`Unable to send /${c.name}`, cause)
     this.failures++
     this.retryOnce(c)
     if (this.failures >= MAX_FAILURES) {
@@ -375,7 +375,7 @@ export class Engine {
     if (this.current === 'idle' || this.current === 'error') return
     this.pause('network')
     this.networkTimer ??= setTimeout(
-      () => this.guard(() => this.toError('Connexion à Discord perdue depuis plus de 2 minutes')),
+      () => this.guard(() => this.toError('Connection to Discord lost for more than 2 minutes')),
       NETWORK_GRACE_MS
     )
   }
@@ -404,7 +404,7 @@ export class Engine {
 
   private async send(c: QueuedCommand): Promise<void> {
     const target = this.target
-    if (!target) throw new Error('Aucun salon actif')
+    if (!target) throw new Error('No active channel')
     this.awaiting = c
     this.lastSent = c
     if (c.priority === 'maintenance') this.lastMaintenanceKey = c.key
@@ -428,8 +428,8 @@ export class Engine {
   private checkSessionLimit(): void {
     const h = this.getConfig().sessionLimitH
     if (!this.sessionActive || this.graceful || h <= 0 || Date.now() - this.sessionStartedAt < h * 3_600_000) return
-    this.logger.info('Limite de session atteinte, arrêt du moteur')
-    this.stopGracefully('Limite de session atteinte')
+    this.logger.info('Session limit reached, stopping the engine')
+    this.stopGracefully('Session limit reached')
   }
 
   // ---- graceful stop ------------------------------------------------------
@@ -450,7 +450,7 @@ export class Engine {
     if (st !== 'captcha') this.queue.clear() // in a captcha the queue only ever holds the user's /verify
     this.pauseReason = null
     this.graceful = { remaining, budgetMs: GRACEFUL_MAX_MS, armedAt: 0, timer: null, reason }
-    this.logger.info('Arrêt propre : actualisation du profil et des quêtes')
+    this.logger.info('Graceful stop: refreshing the profile and the quests')
     // captcha: nothing is sent until it is solved; activate() then continues the stop
     if (st !== 'captcha') this.continueGracefulStop()
     return true
@@ -543,7 +543,7 @@ export class Engine {
       try {
         cb(s, info)
       } catch (err) {
-        this.logger.error("Erreur dans un écouteur d'état", err)
+        this.logger.error('State listener failed', err)
       }
     }
   }
@@ -557,18 +557,18 @@ export class Engine {
   }
 
   private fail(err: unknown): void {
-    this.logger.error('Erreur inattendue dans le moteur', err)
+    this.logger.error('Unexpected error in the engine', err)
     try {
       this.pause('exception')
     } catch (e) {
-      this.logger.error('Mise en pause impossible', e)
+      this.logger.error('Unable to pause', e)
     }
   }
 }
 
 function formatWait(ms: number): string {
   const s = Math.round(ms / 1000)
-  if (s < 60) return `${s} s`
+  if (s < 60) return `${s}s`
   const m = Math.round(s / 60)
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
 }

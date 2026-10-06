@@ -12,7 +12,7 @@ export interface Cipher {
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-/** Fusion profonde ; les objets nullables (target) sont remplacés en bloc. */
+/** Deep merge; nullable objects (target) are replaced as a whole. */
 function merge(base: Obj, patch: Obj): Obj {
   const out: Obj = { ...base }
   for (const [k, v] of Object.entries(patch)) {
@@ -42,17 +42,17 @@ export class ConfigStore {
     if (!existsSync(this.file)) return this.get()
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.file, 'utf8'))
-      if (!isObj(parsed)) throw new Error('config invalide')
+      if (!isObj(parsed)) throw new Error('invalid config')
       const { target, ...rest } = parsed
       const merged = merge(DEFAULT_CONFIG as unknown as Obj, rest)
       if (target === null || isObj(target)) merged.target = target
       this.config = merged as unknown as Config
     } catch (e) {
-      this.log.warn('Configuration corrompue, retour aux valeurs par défaut', e)
+      this.log.warn('Corrupt configuration, back to the defaults', e)
       try {
         renameSync(this.file, this.backup)
       } catch (err) {
-        this.log.error('Sauvegarde de la configuration corrompue impossible', err)
+        this.log.error('Unable to back up the corrupt configuration', err)
       }
       this.config = structuredClone(DEFAULT_CONFIG)
     }
@@ -72,7 +72,7 @@ export class ConfigStore {
   }
 
   setToken(token: string): void {
-    if (!this.cipher.available()) throw new Error('Chiffrement indisponible')
+    if (!this.cipher.available()) throw new Error('Encryption unavailable')
     this.config.tokenEncrypted = this.cipher.encrypt(token)
     this.commit()
   }
@@ -83,7 +83,7 @@ export class ConfigStore {
     try {
       return this.cipher.decrypt(enc)
     } catch (e) {
-      this.log.warn('Déchiffrement du token impossible', e)
+      this.log.warn('Unable to decrypt the token', e)
       return null
     }
   }

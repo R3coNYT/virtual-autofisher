@@ -73,7 +73,7 @@ describe('registerHandlers', () => {
   it('auth.setToken failure rejects and stores nothing', async () => {
     const { call, config, client } = setup()
     client.failLogin = true
-    await expect(call('auth.setToken', TOKEN)).rejects.toThrow('Token invalide')
+    await expect(call('auth.setToken', TOKEN)).rejects.toThrow('Invalid or expired token')
     expect(config.getToken()).toBeNull()
   })
 
@@ -126,7 +126,7 @@ describe('registerHandlers', () => {
 
   it('engine.start without a target rejects', async () => {
     const { call } = setup()
-    await expect(call('engine.start')).rejects.toThrow('Aucun salon')
+    await expect(call('engine.start')).rejects.toThrow('No channel selected')
   })
 
   it('engine.stop writes the session summary to sessions/<startedAt>.json', async () => {
@@ -214,7 +214,7 @@ describe('registerHandlers', () => {
     config.update({ target: T })
     await call('engine.start')
     client.failLogin = true
-    await expect(call('auth.setToken', 'bad')).rejects.toThrow('Token invalide')
+    await expect(call('auth.setToken', 'bad')).rejects.toThrow('Invalid or expired token')
     expect(engine.state).toBe('running')
     expect(config.getToken()).toBe(TOKEN)
     expect(sent.map((s) => s.payload)).toContainEqual({ status: 'connecting' })
@@ -228,7 +228,7 @@ describe('registerHandlers', () => {
     client.failLoginKind = 'network'
     await api.autoLogin()
     expect(config.getToken()).toBe(TOKEN)
-    expect(sent.at(-1)?.payload).toEqual({ status: 'disconnected', message: 'Connexion à Discord impossible' })
+    expect(sent.at(-1)?.payload).toEqual({ status: 'disconnected', message: 'Unable to connect to Discord' })
     await vi.advanceTimersByTimeAsync(29_000)
     expect(sent.filter((s) => (s.payload as { status: string }).status === 'connecting')).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(1_500) // 30 s: attempt 2, still failing
@@ -289,9 +289,9 @@ describe('registerHandlers', () => {
 
   it('target.set validates ids; config.update cannot set the target', async () => {
     const { call, config } = setup()
-    await expect(call('target.set', 'g1', '20001')).rejects.toThrow('invalide')
-    await expect(call('target.set', '10001', '')).rejects.toThrow('invalide')
-    await expect(call('channels.list', 'x')).rejects.toThrow('invalide')
+    await expect(call('target.set', 'g1', '20001')).rejects.toThrow('Invalid server id')
+    await expect(call('target.set', '10001', '')).rejects.toThrow('Invalid channel id')
+    await expect(call('channels.list', 'x')).rejects.toThrow('Invalid server id')
     expect(config.get().target).toBeNull()
     await call('config.update', { target: T })
     expect(config.get().target).toBeNull()
@@ -345,11 +345,11 @@ describe('registerHandlers', () => {
     await a.call('engine.start')
     await vi.advanceTimersByTimeAsync(60_000) // nothing answers: 3 timeouts → paused (noResponse)
     expect(a.engine.state).toBe('paused')
-    expect(toasts(a.sent)).toEqual([{ level: 'error', message: 'Virtual Fisher ne répond pas — pêche en pause' }])
+    expect(toasts(a.sent)).toEqual([{ level: 'error', message: 'Virtual Fisher is not responding — fishing paused' }])
     a.config.update({ sessionLimitH: 1 })
     await vi.advanceTimersByTimeAsync(3_600_000)
     expect(a.engine.state).toBe('idle')
-    expect(toasts(a.sent).at(-1)).toEqual({ level: 'info', message: 'Limite de session atteinte — pêche arrêtée' })
+    expect(toasts(a.sent).at(-1)).toEqual({ level: 'info', message: 'Session limit reached — fishing stopped' })
 
     const b = setup()
     b.config.update({ target: T })
@@ -359,12 +359,12 @@ describe('registerHandlers', () => {
     })
     b.client.emitBot(fixture('catch-basic'))
     expect(b.engine.state).toBe('paused')
-    expect(toasts(b.sent)).toEqual([{ level: 'error', message: 'Erreur inattendue — pêche en pause' }])
+    expect(toasts(b.sent)).toEqual([{ level: 'error', message: 'Unexpected error — fishing paused' }])
     await b.call('engine.resume')
     b.client.emitDisconnect()
     await vi.advanceTimersByTimeAsync(120_000)
     expect(b.engine.state).toBe('error')
-    expect(toasts(b.sent).at(-1)).toEqual({ level: 'error', message: 'Erreur : Connexion à Discord perdue depuis plus de 2 minutes' })
+    expect(toasts(b.sent).at(-1)).toEqual({ level: 'error', message: 'Error: Connection to Discord lost for more than 2 minutes' })
 
     // a user pause or a plain stop is not toasted
     const c = setup()
@@ -403,7 +403,7 @@ describe('registerHandlers', () => {
     const shows = sent.filter((s) => s.channel === 'captcha.show').map((s) => s.payload)
     expect(shows.at(-1)).toEqual({
       imageUrl: 'https://cdn.example.test/captcha/abc123.png',
-      text: 'Captcha résolu — reprise dans quelques secondes…',
+      text: 'Captcha solved — resuming in a few seconds…',
       solved: true
     })
     expect(await call('engine.status')).toMatchObject({ captcha: { solved: true } })

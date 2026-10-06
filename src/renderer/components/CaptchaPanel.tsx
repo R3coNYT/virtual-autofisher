@@ -10,8 +10,8 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [href], [tabin
 
 /**
  * Modal shown whenever the engine is in captcha. It cannot be dismissed (no close button, Escape ignored)
- * and never sends anything by itself: only Valider / Nouvelle image, clicked or confirmed by the user, do.
- * « Arrêter la pêche » (false positive) stops the engine without sending anything; main then hides the panel.
+ * and never sends anything by itself: only Submit / New image, clicked or confirmed by the user, do.
+ * "Stop fishing" (false positive) stops the engine without sending anything; main then hides the panel.
  */
 export function CaptchaPanel(): JSX.Element | null {
   const captcha = useStore((s) => s.captcha)
@@ -33,7 +33,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
   const box = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
-  // a new captcha.show (new image, or the bot rejected the answer) ends the "Envoi…" state
+  // a new captcha.show (new image, or the bot rejected the answer) ends the "Sending…" state
   useEffect(() => {
     setSending(false)
     setNoReply(false)
@@ -125,10 +125,10 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
           </span>
           <div>
             <h2 id={titleId} className="text-lg font-semibold text-white">
-              {solved ? 'Captcha résolu' : 'Captcha à résoudre'}
+              {solved ? 'Captcha solved' : 'Captcha to solve'}
             </h2>
             <p className="text-xs text-slate-400">
-              {solved ? 'La pêche reprend dans quelques secondes.' : "La pêche est en pause. Rien n'est envoyé sans votre validation."}
+              {solved ? 'Fishing resumes in a few seconds.' : 'Fishing is paused. Nothing is sent without your confirmation.'}
             </p>
           </div>
         </header>
@@ -136,14 +136,14 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
         {captcha.imageUrl && !imgFailed ? (
           <img
             src={captcha.imageUrl}
-            alt="Image du captcha Virtual Fisher"
+            alt="Virtual Fisher captcha image"
             onError={() => setImgFailed(true)}
             className="max-h-64 w-full rounded-xl border border-white/10 bg-black/30 object-contain"
           />
         ) : (
           <p className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-4 text-sm text-slate-400">
             <ImageOff className="h-4 w-4 shrink-0" aria-hidden />
-            {captcha.imageUrl ? "L'image n'a pas pu être chargée : essayez « Nouvelle image »." : 'Aucune image : lisez le message du bot ci-dessous.'}
+            {captcha.imageUrl ? 'The image could not be loaded: try "New image".' : 'No image: read the bot message below.'}
           </p>
         )}
 
@@ -152,7 +152,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
             className={`whitespace-pre-line rounded-xl border px-3 py-2.5 text-sm ${solved ? 'border-turquoise/30 bg-turquoise/10 text-turquoise' : 'border-white/10 bg-white/5 text-slate-200'}`}
             aria-live="polite"
           >
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">Dernier message du bot</span>
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">Latest bot message</span>
             {captcha.text}
           </p>
         )}
@@ -167,13 +167,13 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
             onChange={(e) => setAnswer(e.target.value)}
             autoComplete="off"
             spellCheck={false}
-            aria-label="Réponse au captcha"
-            placeholder="Tapez la réponse"
+            aria-label="Captcha answer"
+            placeholder="Type the answer"
             className={`w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-base text-white placeholder:text-slate-500 transition hover:border-white/20 focus:border-accent/60 ${focusRing}`}
           />
           {noReply && !error && !solved && (
             <p role="status" className="text-sm text-amber-300">
-              Pas de réponse, réessaie.
+              No reply, try again.
             </p>
           )}
           {error && (
@@ -185,7 +185,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" disabled={!answer.trim() || locked} className={primaryButton}>
               {sending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-              {sending ? 'Envoi…' : 'Valider'}
+              {sending ? 'Sending…' : 'Submit'}
             </button>
             {regenAvailable && (
               <button
@@ -194,7 +194,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
                 onClick={() => void run(() => window.api.captcha.regen())}
                 className={`inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
               >
-                <RefreshCw className="h-4 w-4" aria-hidden /> Nouvelle image
+                <RefreshCw className="h-4 w-4" aria-hidden /> New image
               </button>
             )}
             {!solved && (
@@ -202,11 +202,11 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
                 type="button"
                 disabled={stopping}
                 onClick={stop}
-                title="Faux captcha ? Arrête la session sans rien envoyer"
+                title="False captcha? Stops the session without sending anything"
                 className={`ml-auto inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
               >
                 {stopping ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Square className="h-4 w-4" aria-hidden />}
-                Arrêter la pêche
+                Stop fishing
               </button>
             )}
           </div>

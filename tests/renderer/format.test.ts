@@ -15,23 +15,23 @@ import type { LogEntry, SlashCommandInfo } from '../../src/shared/types'
 const norm = (s: string): string => s.replace(/[\u202f\u00a0]/g, ' ')
 
 describe('formatMoney', () => {
-  it('groups thousands with spaces and appends $', () => {
-    expect(norm(formatMoney(1234567))).toBe('1 234 567 $')
-    expect(norm(formatMoney(0))).toBe('0 $')
-    expect(norm(formatMoney(-1500))).toMatch(/^[-\u2212]1 500 \$$/)
+  it('en-US: $ prefix and comma grouping', () => {
+    expect(formatMoney(1234567)).toBe('$1,234,567')
+    expect(formatMoney(0)).toBe('$0')
+    expect(formatMoney(-1500)).toBe('-$1,500')
   })
   it('rounds and tolerates null', () => {
-    expect(norm(formatMoney(12.6))).toBe('13 $')
+    expect(formatMoney(12.6)).toBe('$13')
     expect(formatMoney(null)).toBe('—')
   })
 })
 
 describe('formatCompact', () => {
-  it('abbreviates large numbers with a decimal comma', () => {
-    expect(norm(formatCompact(1_200_000))).toBe('1,2 M')
-    expect(norm(formatCompact(3_000_000))).toBe('3 M')
-    expect(norm(formatCompact(45_300))).toBe('45,3 k')
-    expect(norm(formatCompact(2_500_000_000))).toBe('2,5 Md')
+  it('abbreviates large numbers with a decimal point', () => {
+    expect(formatCompact(1_200_000)).toBe('1.2M')
+    expect(formatCompact(3_000_000)).toBe('3M')
+    expect(formatCompact(45_300)).toBe('45.3k')
+    expect(formatCompact(2_500_000_000)).toBe('2.5B')
   })
   it('leaves small numbers alone', () => {
     expect(formatCompact(999)).toBe('999')
@@ -40,11 +40,11 @@ describe('formatCompact', () => {
 
 describe('formatDuration', () => {
   it('formats hours, minutes and seconds', () => {
-    expect(formatDuration(3_720_000)).toBe('1 h 02 min')
-    expect(formatDuration(245_000)).toBe('4 min 05 s')
-    expect(formatDuration(12_000)).toBe('12 s')
-    expect(formatDuration(0)).toBe('0 s')
-    expect(formatDuration(-5000)).toBe('0 s')
+    expect(formatDuration(3_720_000)).toBe('1h 02m')
+    expect(formatDuration(245_000)).toBe('4m 05s')
+    expect(formatDuration(12_000)).toBe('12s')
+    expect(formatDuration(0)).toBe('0s')
+    expect(formatDuration(-5000)).toBe('0s')
   })
 })
 
