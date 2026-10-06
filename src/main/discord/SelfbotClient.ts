@@ -1,0 +1,258 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { Client } from 'discord.js-selfbot-v13'
+import type { BotMessage, ChannelInfo, GuildInfo, SelfUser, SlashCommandInfo } from '../../shared/types'
+import { maskSecrets } from '../util/maskSecrets'
+import type { Logger } from '../util/logger'
+import { VIRTUAL_FISHER_ID, type DiscordClient, type DiscordEventMap, type SlashOptions } from './DiscordClient'
+import { toBotMessage, type LibMessageLike } from './toBotMessage'
+
+const LOGIN_TIMEOUT_MS = 20_000
+const MEMBER_FETCH_CONCURRENCY = 3
+const INVALID_TOKEN = 'Token invalide ou expiré'
+
+type Listeners = { [E in keyof DiscordEventMap]: Set<DiscordEventMap[E]> }
+
+type RawCommand = {
+  id: string
+  name: string
+  version: string
+  application_id: string
+  options?: { name: string; type: number; required?: boolean; choices?: { name: string; value: unknown }[] }[]
+}
+
+type RestRoute = { get(): Promise<unknown> }
+type RestApi = Record<string, Record<string, Record<string, RestRoute>>>
+
+export type SelfbotClientOpts = { captureDir?: string; logger?: Logger }
+
+/**
+ * The only module touching discord.js-selfbot-v13.
+ *
+ * Command listing: the lib has no public manager for it. Its own `sendSlash` uses
+ * `TextBasedChannel#searchInteraction`, which GETs `guilds/{id}/application-command-index`
+ * through `client.api`. We call that same REST route directly (per guild, not per channel)
+ * and filter on VF's application id; `sendSlash(botId, name, ...args)` then resolves the
+ * command itself, with positional args in option order.
+ */
+export class SelfbotClient implements DiscordClient {
+  private client: Client | null = null
+  private selfId: string | null = null
+  private activeChannelId: string | null = null
+  private disconnected = false
+  private readonly listeners: Listeners = {
+    botMessage: new Set(),
+    disconnected: new Set(),
+    reconnected: new Set(),
+    rateLimited: new Set()
+  }
+  private readonly vfByGuild = new Map<string, boolean>()
+  private readonly commandsByGuild = new Map<string, SlashCommandInfo[]>()
+
+  constructor(private readonly opts: SelfbotClientOpts = {}) {}
+
+  on<E extends keyof DiscordEventMap>(event: E, cb: DiscordEventMap[E]): () => void {
+    const set = this.listeners[event] as Set<DiscordEventMap[E]>
+    set.add(cb)
+    return () => {
+      set.delete(cb)
+    }
+  }
+
+  private emit<E extends keyof DiscordEventMap>(event: E, ...args: Parameters<DiscordEventMap[E]>): void {
+    for (const cb of [...this.listeners[event]] as ((...a: unknown[]) => void)[]) {
+      try {
+        cb(...args)
+      } catch (e) {
+        this.opts.logger?.error(`listener ${event} failed`, e)
+      }
+    }
+  }
+
+  setActiveChannel(channelId: string | null): void {
+    this.activeChannelId = channelId
+  }
+
+  async login(token: string): Promise<SelfUser> {
+    await this.logout()
+    const client = new Client({ checkUpdate: false } as ConstructorParameters<typeof Client>[0])
+    this.client = client
+    this.attach(client)
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(INVALID_TOKEN)), LOGIN_TIMEOUT_MS)
+        const done = (err?: Error): void => {
+          clearTimeout(timer)
+          if (err) reject(err)
+          else resolve()
+        }
+        client.once('ready', () => done())
+        client.login(token).catch((e: unknown) => {
+          // never log the raw error without masking: it may echo the token
+          const msg = maskSecrets(e instanceof Error ? e.message : String(e))
+          this.opts.logger?.warn(`login failed: ${msg}`)
+          done(new Error(INVALID_TOKEN))
+        })
+      })
+    } catch {
+      await this.logout()
+      throw new Error(INVALID_TOKEN)
+    }
+
+    const u = client.user
+    if (!u) {
+      await this.logout()
+      throw new Error(INVALID_TOKEN)
+    }
+    this.selfId = u.id
+    return { id: u.id, username: u.username, avatarUrl: u.displayAvatarURL() }
+  }
+
+  async logout(): Promise<void> {
+    const c = this.client
+    this.client = null
+    this.selfId = null
+    this.disconnected = false
+    this.vfByGuild.clear()
+    this.commandsByGuild.clear()
+    if (c) {
+      try {
+        c.removeAllListeners()
+        c.destroy()
+      } catch (e) {
+        this.opts.logger?.warn('destroy failed', e)
+      }
+    }
+  }
+
+  private attach(client: Client): void {
+    const markDisconnected = (): void => {
+      if (this.disconnected) return
+      this.disconnected = true
+      this.emit('disconnected')
+    }
+    const markReconnected = (): void => {
+      if (!this.disconnected) return
+      this.disconnected = false
+      this.emit('reconnected')
+    }
+    client.on('shardDisconnect', markDisconnected)
+    client.on('shardReconnecting', markDisconnected)
+    client.on('shardResume', markReconnected)
+    client.on('shardReady', markReconnected)
+    client.on('rateLimit', (d) => this.emit('rateLimited', d.timeout))
+    client.on('messageCreate', (m) => this.handleMessage(m as unknown as LibMessageLike, false))
+    client.on('messageUpdate', (_old, m) => this.handleMessage(m as unknown as LibMessageLike, true))
+    client.on('error', (e) => this.opts.logger?.error('client error', e))
+  }
+
+  private handleMessage(msg: LibMessageLike, isEdit: boolean): void {
+    if (!this.selfId || !this.activeChannelId || msg.channelId !== this.activeChannelId) return
+    const bm = toBotMessage(msg, this.selfId, isEdit)
+    if (!bm) return
+    void this.capture(bm)
+    this.emit('botMessage', bm)
+  }
+
+  private async capture(bm: BotMessage): Promise<void> {
+    const dir = this.opts.captureDir
+    if (!dir) return
+    try {
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, `${Date.now()}-${bm.id}.json`), JSON.stringify(bm, null, 2), 'utf8')
+    } catch (e) {
+      this.opts.logger?.warn('capture failed', e)
+    }
+  }
+
+  private requireClient(): Client {
+    if (!this.client || !this.selfId) throw new Error('Non connecté')
+    return this.client
+  }
+
+  async listGuilds(): Promise<GuildInfo[]> {
+    const client = this.requireClient()
+    const guilds = [...client.guilds.cache.values()]
+    const result: GuildInfo[] = new Array(guilds.length)
+    let next = 0
+    const worker = async (): Promise<void> => {
+      while (next < guilds.length) {
+        const i = next++
+        const g = guilds[i]
+        let has = this.vfByGuild.get(g.id)
+        if (has === undefined) {
+          try {
+            await g.members.fetch(VIRTUAL_FISHER_ID)
+            has = true
+          } catch {
+            has = false
+          }
+          this.vfByGuild.set(g.id, has)
+        }
+        result[i] = { id: g.id, name: g.name, iconUrl: g.iconURL(), hasVirtualFisher: has }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(MEMBER_FETCH_CONCURRENCY, guilds.length) }, worker))
+    return result.sort((a, b) => Number(b.hasVirtualFisher) - Number(a.hasVirtualFisher) || a.name.localeCompare(b.name))
+  }
+
+  async listChannels(guildId: string): Promise<ChannelInfo[]> {
+    const client = this.requireClient()
+    const guild = client.guilds.cache.get(guildId)
+    if (!guild) return []
+    const me = guild.members.me ?? (await guild.members.fetch(this.selfId as string).catch(() => null))
+    if (!me) return []
+    const out: ChannelInfo[] = []
+    for (const ch of guild.channels.cache.values()) {
+      if (!ch.isText() || ch.isThread()) continue
+      const perms = ch.permissionsFor(me)
+      if (!perms?.has(['SEND_MESSAGES', 'USE_APPLICATION_COMMANDS'])) continue
+      out.push({ id: ch.id, name: ch.name, parentName: ch.parent?.name ?? null })
+    }
+    return out.sort((a, b) => (a.parentName ?? '').localeCompare(b.parentName ?? '') || a.name.localeCompare(b.name))
+  }
+
+  async getBotCommands(guildId: string): Promise<SlashCommandInfo[]> {
+    const cached = this.commandsByGuild.get(guildId)
+    if (cached) return cached
+    const client = this.requireClient()
+    // See class comment: same REST route the lib's searchInteraction uses.
+    const api = (client as unknown as { api: RestApi }).api
+    const data = (await api.guilds[guildId]['application-command-index'].get()) as {
+      application_commands?: RawCommand[]
+      applications?: { id: string; bot_id?: string }[]
+    }
+    const appIds = new Set(
+      (data.applications ?? []).filter((a) => a.id === VIRTUAL_FISHER_ID || a.bot_id === VIRTUAL_FISHER_ID).map((a) => a.id)
+    )
+    appIds.add(VIRTUAL_FISHER_ID)
+    const cmds: SlashCommandInfo[] = (data.application_commands ?? [])
+      .filter((c) => appIds.has(c.application_id))
+      .map((c) => ({
+        name: c.name,
+        id: c.id,
+        version: c.version,
+        options: (c.options ?? []).map((o) => ({
+          name: o.name,
+          type: o.type,
+          required: o.required ?? false,
+          ...(o.choices ? { choices: o.choices.map((ch) => String(ch.value)) } : {})
+        }))
+      }))
+    this.commandsByGuild.set(guildId, cmds)
+    return cmds
+  }
+
+  async sendSlash(channelId: string, command: string, options: SlashOptions = {}): Promise<void> {
+    const client = this.requireClient()
+    const channel = client.channels.cache.get(channelId)
+    if (!channel || !channel.isText()) throw new Error('Salon introuvable')
+    const guildId = 'guildId' in channel ? (channel.guildId as string | null) : null
+    const info = guildId ? (await this.getBotCommands(guildId)).find((c) => c.name === command) : undefined
+    const ordered = info
+      ? info.options.filter((o) => options[o.name] !== undefined).map((o) => options[o.name])
+      : Object.values(options)
+    await channel.sendSlash(VIRTUAL_FISHER_ID, command, ...ordered)
+  }
+}
