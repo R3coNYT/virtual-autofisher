@@ -26,11 +26,15 @@ export type CaptchaDeps = {
    * or back to 'stopping' when a graceful stop was under way.
    */
   activate: () => void
+  /** Leaves a captcha that arrived without a session (idle/error): back to idle, nothing resumes. */
+  backToIdle: () => void
   guard: (fn: () => void) => void
 }
 
-/** States in which a captcha takes over the engine. In idle/error nothing is being sent anyway. */
-const WATCHED: EngineState[] = ['connecting', 'running', 'paused', 'resting', 'stopping', 'captcha']
+/** States in which a captcha takes over the engine (idle/error: a reply to a manual command). */
+const WATCHED: EngineState[] = ['idle', 'error', 'connecting', 'running', 'paused', 'resting', 'stopping', 'captcha']
+/** Pre-captcha states without a session: the solve goes back to idle, never to fishing. */
+const SESSIONLESS: EngineState[] = ['idle', 'error']
 
 /**
  * Captcha safety. On a captcha the queue is emptied and paused and the scheduler frozen;
@@ -40,6 +44,8 @@ const WATCHED: EngineState[] = ['connecting', 'running', 'paused', 'resting', 's
 export class CaptchaFlow {
   private info: Info = {}
   private resumeTimer: ReturnType<typeof setTimeout> | null = null
+  /** State the engine was in when the captcha arrived. */
+  private from: EngineState | null = null
 
   constructor(private readonly d: CaptchaDeps) {}
 
@@ -83,6 +89,7 @@ export class CaptchaFlow {
   reset(): void {
     this.cancelResume()
     this.info = {}
+    this.from = null
   }
 
   private enter(ev: Extract<GameEvent, { kind: 'captcha' }>): void {
@@ -97,7 +104,10 @@ export class CaptchaFlow {
     this.d.scheduler.freeze()
     this.d.scheduler.onQueueCleared() // dropped maintenance is re-requested after the thaw
     this.cancelResume()
-    if (st !== 'captcha') this.d.gameState.apply(ev) // counts the captcha once, not on each update
+    if (st !== 'captcha') {
+      this.from = st
+      this.d.gameState.apply(ev) // counts the captcha once, not on each update
+    }
     this.info = { captchaImageUrl: ev.imageUrl ?? this.info.captchaImageUrl, captchaText: ev.text }
     this.d.setState('captcha', { ...this.info })
   }
@@ -117,6 +127,10 @@ export class CaptchaFlow {
           this.resumeTimer = null
           if (this.d.getState() !== 'captcha') return
           this.info = {}
+          const from = this.from
+          this.from = null
+          // no session to resume: queue stays paused (until the next manual command), scheduler stopped
+          if (from && SESSIONLESS.includes(from)) return this.d.backToIdle()
           const reason = this.d.pauseReason()
           // paused before (or, for the network, during) the captcha: stay paused, scheduler frozen
           if (reason) return this.d.setState('paused', { reason })

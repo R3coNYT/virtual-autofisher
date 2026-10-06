@@ -434,6 +434,60 @@ describe('registerHandlers', () => {
     expect(sent.map((s) => s.channel)).toContain('captcha.hide')
   })
 
+  it('target.set while idle loads the commands, emits them and listens to the channel; command.send works idle', async () => {
+    const { call, client, engine, sent } = setup()
+    await call('target.set', T.guildId, T.channelId)
+    expect(engine.state).toBe('idle')
+    expect(client.activeChannel).toBe(T.channelId)
+    const emitted = sent.filter((s) => s.channel === 'engine.commands')
+    expect(emitted).toHaveLength(1)
+    expect((emitted[0].payload as { name: string }[]).map((c) => c.name)).toContain('profile')
+
+    await call('command.send', 'profile')
+    expect(client.sent).toEqual([{ channelId: T.channelId, command: 'profile', options: undefined }])
+    client.emitBot(fixture('catch-basic'))
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(client.sent).toHaveLength(1) // no fishing started
+    expect(engine.state).toBe('idle')
+  })
+
+  it('commands are loaded and emitted after auto-login and setToken when a target exists', async () => {
+    const a = setup()
+    a.config.update({ target: T })
+    a.config.setToken(TOKEN)
+    await a.api.autoLogin()
+    expect(a.sent.some((s) => s.channel === 'engine.commands' && (s.payload as unknown[]).length > 0)).toBe(true)
+    expect(a.client.activeChannel).toBe(T.channelId)
+
+    const b = setup()
+    b.config.update({ target: T })
+    await b.call('auth.setToken', TOKEN)
+    expect(b.sent.filter((s) => s.channel === 'engine.commands').at(-1)?.payload).not.toEqual([])
+    expect(b.client.activeChannel).toBe(T.channelId)
+  })
+
+  it('failing to load the commands: toast and an empty list, login still succeeds', async () => {
+    const { call, client, sent, config } = setup()
+    config.update({ target: T })
+    client.failCommands = true
+    await call('auth.setToken', TOKEN)
+    expect(sent.filter((s) => s.channel === 'engine.commands').at(-1)?.payload).toEqual([])
+    expect(sent.some((s) => s.channel === 'toast' && (s.payload as { level: string }).level === 'error')).toBe(true)
+    expect(sent.at(-1)?.channel === 'connection.status' || sent.some((s) => (s.payload as { status?: string }).status === 'connected')).toBe(true)
+  })
+
+  it('logout stops listening and empties the commands; a plain stop keeps the channel', async () => {
+    const { call, client, config, sent } = setup()
+    await call('auth.setToken', TOKEN)
+    config.update({ target: T })
+    await call('engine.start')
+    await call('engine.stop', false)
+    expect(client.activeChannel).toBe(T.channelId)
+    await call('auth.logout')
+    expect(client.activeChannel).toBeNull()
+    expect(sent.filter((s) => s.channel === 'engine.commands').at(-1)?.payload).toEqual([])
+  })
+
   it('engine.stop during a captcha → idle, captcha.hide, nothing sent', async () => {
     const { call, config, client, engine, sent } = setup()
     config.update({ target: T })

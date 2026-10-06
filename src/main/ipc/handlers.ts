@@ -110,6 +110,8 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     send('game.patch', patch)
     if (newLog.length) send('log.append', newLog)
   })
+  // every (re)load of the command list: session start, target change, login, logout
+  engine.onCommands((cmds) => send('engine.commands', cmds))
   client.on('disconnected', () => setConnection('disconnected'))
   client.on('reconnected', () => setConnection('connected'))
   engine.onSessionEnd((s: SessionSummary) => {
@@ -129,6 +131,21 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     }
   }
 
+  /**
+   * Manual mode: listen to the target channel and load its commands without a session, so the
+   * quick commands work while idle. A failure is toasted (the list is emptied by the engine).
+   */
+  const loadCommands = async (): Promise<void> => {
+    const target = config.get().target
+    if (!target) return
+    try {
+      await engine.useTarget(target)
+    } catch (e) {
+      logger.warn(`Unable to load the commands: ${maskSecrets(e instanceof Error ? e.message : String(e))}`)
+      send('toast', { level: 'error', message: 'Unable to load the Virtual Fisher commands' })
+    }
+  }
+
   // --- auth ---------------------------------------------------------------------------------
   handle('auth.setToken', async (token: string) => {
     loginGen++
@@ -142,7 +159,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
       throw e
     }
     cancelRetry()
-    engine.stop()
+    engine.detach() // possibly another account: forget the channel and its cached commands
     try {
       config.setToken(token)
     } catch (e) {
@@ -152,11 +169,12 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     user = me
     seedVf()
     setConnection('connected')
+    await loadCommands()
     return me
   })
   handle('auth.logout', async () => {
     cancelRetry()
-    engine.stop()
+    engine.detach() // stops listening to the channel
     await client.logout()
     config.clearToken()
     user = null
@@ -193,6 +211,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
       seedVf()
       attempt = 0
       setConnection('connected')
+      await loadCommands()
     } catch (e) {
       if (gen !== loginGen) return
       user = null
@@ -230,17 +249,16 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     const target = { guildId, channelId }
     const was = engine.state
     config.update({ target })
-    if (was === 'running' || was === 'resting') await engine.start(target) // stops the old session itself
-    else if (was === 'paused' || was === 'stopping') engine.stop() // resuming would fish in the old channel
-    if (engine.availableCommands.length) send('engine.commands', engine.availableCommands)
+    if (was === 'running' || was === 'resting') return void (await engine.start(target)) // stops the old session itself
+    if (was === 'paused' || was === 'stopping') engine.stop() // resuming would fish in the old channel
+    await loadCommands() // idle: listen to the new channel, commands of its guild (emitted)
   })
 
   // --- engine -------------------------------------------------------------------------------
   const startEngine = async (): Promise<void> => {
     const target = config.get().target
     if (!target) throw new Error('No channel selected')
-    await engine.start(target)
-    send('engine.commands', engine.availableCommands)
+    await engine.start(target) // emits engine.commands once they are loaded
   }
   handle('engine.start', startEngine)
   handle('engine.pause', () => engine.pause())

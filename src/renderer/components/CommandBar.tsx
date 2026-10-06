@@ -2,13 +2,13 @@ import { memo, useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Send } from 'lucide-react'
 import { boosterUseOptions } from '../../shared/boosters'
-import type { EngineState, SlashCommandInfo } from '../../shared/types'
-import { coinflipOptionNames, parseCommandLine, sellAllOptions } from '../format'
+import type { SlashCommandInfo } from '../../shared/types'
+import { coinflipOptionNames, commandLockReason, parseCommandLine, sellAllOptions } from '../format'
 import { useStore } from '../store'
 import { cleanError, focusRing } from '../ui'
 import { cardCls } from './StatCard'
 
-const ACTIVE: EngineState[] = ['running', 'paused', 'resting']
+const UNAVAILABLE = 'Command unavailable'
 
 /** `options` returning null: the command exists but lacks the needed choice (button disabled). */
 type Quick = {
@@ -35,17 +35,16 @@ const field = `rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-
 export const CommandBar = memo(function CommandBar(): JSX.Element {
   const commands = useStore((s) => s.commands)
   const engineState = useStore((s) => s.engineState)
+  const hasTarget = useStore((s) => s.target !== null)
   const [side, setSide] = useState('')
   const [amount, setAmount] = useState('')
   const [line, setLine] = useState('')
   const listId = useId()
 
-  const captcha = engineState === 'captcha'
-  const locked = captcha || !ACTIVE.includes(engineState)
-  const lockReason = captcha ? 'Solve the captcha first' : 'Start fishing to send commands'
+  const lockReason = commandLockReason(engineState, hasTarget)
   const find = (name: string): SlashCommandInfo | undefined => commands.find((c) => c.name === name)
-  const reasonFor = (name: string): string | undefined =>
-    locked ? lockReason : find(name) ? undefined : `/${name} unavailable on this server`
+  const reasonFor = (name: string): string | undefined => lockReason ?? (find(name) ? undefined : UNAVAILABLE)
+  const lineReason = lockReason ?? (commands.length ? undefined : UNAVAILABLE)
 
   const fail = (e: unknown): void => useStore.getState().pushToast({ level: 'error', message: cleanError(e) })
   const send = (name: string, options?: Record<string, string | number>): void => {
@@ -129,8 +128,8 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
           list={listId}
           value={line}
           onChange={(e) => setLine(e.target.value)}
-          disabled={locked}
-          title={locked ? lockReason : undefined}
+          disabled={!!lineReason}
+          title={lineReason}
           placeholder="/command option=value"
           aria-label="Free command"
           className={`${field} min-w-0 flex-1`}
@@ -140,7 +139,7 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
             <option key={c.name} value={`/${c.name} ${c.options.map((o) => `${o.name}=`).join(' ')}`.trim()} />
           ))}
         </datalist>
-        <button type="submit" className={btn} disabled={locked || !line.trim()} aria-label="Send the command" title="Send">
+        <button type="submit" className={btn} disabled={!!lineReason || !line.trim()} aria-label="Send the command" title={lineReason ?? 'Send'}>
           <Send className="h-3.5 w-3.5" aria-hidden />
         </button>
       </form>

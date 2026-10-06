@@ -33,6 +33,8 @@ const SESSION_CHECK_MS = 15_000
 /** A non-fish command answered by "wait N" is re-sent once after N when N is at most this long. */
 const DEFER_MAX_MS = 10 * 60_000
 const ACTIVE: EngineState[] = ['running', 'paused', 'resting']
+/** No session: manual commands are sent straight to the target channel ("manual mode"). */
+const IDLE: EngineState[] = ['idle', 'error']
 /** Graceful stop: data refreshed before halting, each only if the guild exposes the command. */
 const GRACEFUL_COMMANDS = ['profile', 'quests']
 /** Graceful stop budget (time spent in a captcha not counted). */
@@ -62,6 +64,10 @@ export class Engine {
   private currentInfo: EngineInfo = {}
   private pauseReason: PauseReason | null = null
   private commands: SlashCommandInfo[] = []
+  /** Guild the commands were loaded for (cache key), null when unknown. */
+  private commandsGuild: string | null = null
+  private commandsListeners = new Set<(c: SlashCommandInfo[]) => void>()
+  /** Channel listened to and commanded: kept after a stop (manual mode), cleared by detach(). */
   private target: Target | null = null
   private gen = 0
   private listeners = new Set<StateCb>()
@@ -127,6 +133,11 @@ export class Engine {
       pauseReason: () => this.pauseReason,
       setState: (s, info) => this.setState(s, info),
       activate: () => this.activate(),
+      backToIdle: () => {
+        this.pauseReason = null
+        this.clearNetworkTimer()
+        this.setState('idle')
+      },
       guard: (fn) => this.guard(fn)
     })
 
@@ -152,6 +163,31 @@ export class Engine {
   onState(cb: StateCb): () => void {
     this.listeners.add(cb)
     return () => this.listeners.delete(cb)
+  }
+
+  /** Called with the command list each time it is (re)loaded or emptied. */
+  onCommands(cb: (c: SlashCommandInfo[]) => void): () => void {
+    this.commandsListeners.add(cb)
+    return () => this.commandsListeners.delete(cb)
+  }
+
+  /**
+   * Manual mode (no session): listens to the target channel and loads its guild's commands
+   * (cached per guild), then emits them. No-op while a session or a captcha is under way.
+   * Throws when the commands cannot be fetched (the list is then emptied).
+   */
+  async useTarget(target: Target): Promise<void> {
+    if (!IDLE.includes(this.current)) return
+    await this.ensureTarget(target)
+    this.emitCommands()
+  }
+
+  /** Logout: halts, forgets the target and its commands, stops listening. */
+  detach(): void {
+    this.stop()
+    this.target = null
+    this.client.setActiveChannel(null)
+    this.setCommands([], null)
   }
 
   /** Called with the summary each time a session ends (stop, error, session limit). */
@@ -184,7 +220,7 @@ export class Engine {
         return this.toError('Unable to fetch the Virtual Fisher commands')
       }
       if (gen !== this.gen) return // stopped or restarted meanwhile
-      this.commands = cmds
+      this.setCommands(cmds, target.guildId)
       if (!cmds.some((c) => c.name === 'fish')) return this.toError('Command /fish not found in this server')
 
       this.failures = 0
@@ -250,11 +286,71 @@ export class Engine {
     this.setState('idle')
   }
 
-  /** User-typed command. Queued while paused/resting; refused in any other state (captcha included). */
-  sendManual(name: string, options?: Record<string, string | number>): void {
+  /**
+   * User-typed command. Running/paused/resting: queued (sent once fishing goes on). Idle/error
+   * (no session): sent to the configured target while nothing else runs. Refused in captcha,
+   * connecting and stopping.
+   */
+  async sendManual(name: string, options?: Record<string, string | number>): Promise<void> {
+    if (IDLE.includes(this.current)) return this.sendIdle(name, options)
     if (!ACTIVE.includes(this.current)) return this.logger.warn(`Command /${name} ignored (state ${this.current})`)
     if (!this.commands.some((c) => c.name === name)) return this.logger.warn(`Command /${name} not found`)
     this.queue.push({ name, options, priority: 'manual' })
+  }
+
+  private async sendIdle(name: string, options?: Record<string, string | number>): Promise<void> {
+    const target = this.getConfig().target
+    if (!target) {
+      this.logger.warn(`Command /${name} ignored: no channel selected`)
+      throw new Error('Choose a channel first')
+    }
+    if (await this.ensureTarget(target)) this.emitCommands() // freshly loaded: the renderer learns them
+    if (!IDLE.includes(this.current)) return this.logger.warn(`Command /${name} ignored (state ${this.current})`)
+    if (!this.commands.some((c) => c.name === name)) return this.logger.warn(`Command /${name} not found`)
+    // the scheduler is stopped: nothing but manual commands can be in the queue
+    this.queue.push({ name, options, priority: 'manual' })
+    this.queue.resume()
+  }
+
+  /**
+   * Idle/error only: target channel listened to, commands of its guild loaded (cached).
+   * True when the commands were fetched now. Throws when they cannot be fetched.
+   */
+  private async ensureTarget(target: Target): Promise<boolean> {
+    if (!IDLE.includes(this.current)) return false
+    this.target = { ...target }
+    this.client.setActiveChannel(target.channelId)
+    if (this.commandsGuild === target.guildId && this.commands.length) return false
+    let cmds: SlashCommandInfo[]
+    try {
+      cmds = await this.client.getBotCommands(target.guildId)
+    } catch (err) {
+      this.logger.error('Unable to fetch the Virtual Fisher commands', err)
+      if (IDLE.includes(this.current) && this.target?.guildId === target.guildId) this.setCommands([], null)
+      throw new Error('Unable to fetch the Virtual Fisher commands')
+    }
+    // a session started, or the target moved to another guild, meanwhile: theirs wins
+    if (!IDLE.includes(this.current) || this.target?.guildId !== target.guildId) return false
+    this.commands = cmds
+    this.commandsGuild = target.guildId
+    return true
+  }
+
+  private setCommands(cmds: SlashCommandInfo[], guildId: string | null): void {
+    this.commands = cmds
+    this.commandsGuild = guildId
+    this.emitCommands()
+  }
+
+  private emitCommands(): void {
+    const list = this.availableCommands
+    for (const cb of [...this.commandsListeners]) {
+      try {
+        cb(list)
+      } catch (err) {
+        this.logger.error('Commands listener failed', err)
+      }
+    }
   }
 
   submitCaptcha(answer: string): void {
@@ -268,7 +364,7 @@ export class Engine {
   // ---- Discord events ---------------------------------------------------
 
   private onBotMessage(m: BotMessage): void {
-    if (this.current === 'idle') return
+    if (!this.target) return // not listening (logged out, or no channel chosen yet)
     const ev = parseMessage(m, Date.now())
     let text = ''
     try {
@@ -300,7 +396,13 @@ export class Engine {
     } else this.gameState.apply(ev) // stats/log only: GameState never sends anything
     if (this.graceful) return void (replyTo && this.gracefulSettled(replyTo.name))
     // In captcha (and idle/connecting/error) nothing may trigger a command.
-    if (!ACTIVE.includes(this.current)) return
+    if (!ACTIVE.includes(this.current)) {
+      // manual /daily without a session: its cooldown still tells when the next one is due
+      if (ev.kind === 'cooldown' && replyTo?.name === 'daily' && IDLE.includes(this.current)) {
+        this.gameState.setNextDailyAt(Date.now() + ev.waitMs)
+      }
+      return
+    }
     if (ev.kind === 'error' && /enough/i.test(ev.text)) this.onNoFunds(replyTo)
     if (ev.kind === 'cooldown') this.onCooldown(ev.waitMs, replyTo)
     else this.scheduler.onEvent(ev)
@@ -525,8 +627,7 @@ export class Engine {
       }
     }
     this.sessionActive = false
-    this.target = null
-    this.client.setActiveChannel(null)
+    // target and active channel are kept: manual commands still work while idle (detach() drops them)
   }
 
   private toError(reason: string): void {

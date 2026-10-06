@@ -7,6 +7,7 @@ import {
   formatSessionGain,
   logFilter,
   coinflipOptionNames,
+  commandLockReason,
   parseCommandLine,
   questRatio,
   sellAllOptions
@@ -161,5 +162,18 @@ describe('questRatio', () => {
     expect(questRatio('15/10', false)).toBe(1)
     expect(questRatio('?', false)).toBe(0)
     expect(questRatio('?', true)).toBe(1)
+  })
+})
+
+describe('commandLockReason', () => {
+  it('unlocks the command bar with or without a session, given a channel', () => {
+    for (const s of ['idle', 'error', 'running', 'paused', 'resting'] as const) expect(commandLockReason(s, true)).toBeUndefined()
+  })
+  it('locks it in captcha, stopping, connecting, and without a channel', () => {
+    expect(commandLockReason('captcha', true)).toBe('Solve the captcha first')
+    expect(commandLockReason('stopping', true)).toBe('Stopping…')
+    expect(commandLockReason('connecting', true)).toBe('Connecting…')
+    expect(commandLockReason('idle', false)).toBe('Choose a channel first')
+    expect(commandLockReason('captcha', false)).toBe('Solve the captcha first')
   })
 })

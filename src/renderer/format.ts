@@ -1,4 +1,4 @@
-import type { LogEntry, SlashCommandInfo } from '../shared/types'
+import type { EngineState, LogEntry, SlashCommandInfo } from '../shared/types'
 
 const intFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
@@ -134,4 +134,17 @@ export function questRatio(progress: string, done: boolean): number {
   const n = (s: string): number => Number(s.replace(/[\s,]/g, ''))
   const total = n(m[2])
   return total > 0 ? Math.min(1, n(m[1]) / total) : 0
+}
+
+/** Engine states in which commands can be sent: with a session, or without one (idle/error: manual mode). */
+const COMMAND_STATES: EngineState[] = ['idle', 'error', 'running', 'paused', 'resting']
+
+/** Why the whole command bar is locked; undefined when commands may be sent. */
+export function commandLockReason(state: EngineState, hasTarget: boolean): string | undefined {
+  if (state === 'captcha') return 'Solve the captcha first'
+  if (state === 'stopping') return 'Stopping…'
+  if (state === 'connecting') return 'Connecting…'
+  if (!COMMAND_STATES.includes(state)) return 'Unavailable right now'
+  if (!hasTarget) return 'Choose a channel first'
+  return undefined
 }

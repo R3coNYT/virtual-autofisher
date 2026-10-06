@@ -31,6 +31,10 @@ export class FakeDiscordClient implements DiscordClient {
   failLogin?: boolean
   failLoginKind: LoginErrorKind = 'invalidToken'
   failSend?: boolean
+  /** getBotCommands rejects while true. */
+  failCommands?: boolean
+  /** Guild ids passed to getBotCommands, in call order. */
+  commandsCalls: string[] = []
   activeChannel: string | null = null
 
   private nextId = 1
@@ -70,7 +74,9 @@ export class FakeDiscordClient implements DiscordClient {
     return this.channels[guildId] ?? []
   }
 
-  async getBotCommands(_guildId: string): Promise<SlashCommandInfo[]> {
+  async getBotCommands(guildId: string): Promise<SlashCommandInfo[]> {
+    this.commandsCalls.push(guildId)
+    if (this.failCommands) throw new Error('Commandes indisponibles')
     return this.commands
   }
 

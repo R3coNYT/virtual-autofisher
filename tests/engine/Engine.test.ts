@@ -352,7 +352,7 @@ describe('Engine', () => {
     expect(engine.state).not.toBe('idle')
     await tick(60_000 + 25_000) // graceful stop: at most 25 s of /profile + /quests
     expect(engine.state).toBe('idle')
-    expect(client.activeChannel).toBeNull()
+    expect(client.activeChannel).toBe('A') // still listening: manual commands work while idle
   })
 
   it('insufficient funds after a buff buy: no buff queued for 30 min', async () => {
@@ -600,7 +600,7 @@ describe('Engine', () => {
     await engine.start(A)
     engine.stop()
     expect(engine.state).toBe('idle')
-    expect(client.activeChannel).toBeNull()
+    expect(client.activeChannel).toBe('A') // still listening: manual commands work while idle
     await tick(60_000)
     expect(names()).toEqual(['fish'])
   })
@@ -820,7 +820,7 @@ describe('Engine: graceful stop', () => {
     expect(states.at(-1)).toEqual({ s: 'idle', info: {} })
     expect(state.snapshot().account.fishValue).toBe(500)
     expect(state.snapshot().quests).toHaveLength(1)
-    expect(client.activeChannel).toBeNull()
+    expect(client.activeChannel).toBe('A')
     await tick(60_000)
     expect(names().slice(before)).toEqual(['profile', 'quests'])
   })
@@ -1004,5 +1004,201 @@ describe('Engine: real captures', () => {
     client.emitBot(realForEngine('edit-other-player'))
     expect(state.snapshot().log).toHaveLength(logLen)
     expect(engine.state).toBe('running')
+  })
+})
+
+describe('Engine: manual commands without a session (idle)', () => {
+  const withTarget = (c: Config) => {
+    c.target = { ...A }
+  }
+
+  it('idle /profile: sent to the target channel, inventory applied, no fishing ever starts', async () => {
+    const { client, engine, state, names, states } = setup(withTarget)
+    const emitted: string[][] = []
+    engine.onCommands((cmds) => emitted.push(cmds.map((c) => c.name)))
+    await engine.sendManual('profile')
+    expect(client.activeChannel).toBe('A')
+    expect(client.sent).toEqual([{ channelId: 'A', command: 'profile', options: undefined }])
+    expect(emitted.at(-1)).toContain('profile')
+    expect(engine.availableCommands.map((c) => c.name)).toContain('fish')
+
+    client.emitBot(PROFILE_REPLY)
+    expect(state.snapshot().account.fishValue).toBe(500)
+    expect(state.snapshot().session.startedAt).toBeFalsy() // no session started
+    await tick(10 * 60_000)
+    expect(names()).toEqual(['profile'])
+    expect(engine.state).toBe('idle')
+    expect(states.map((x) => x.s)).toEqual([])
+    expect(state.snapshot().nextFishAt).toBeNull()
+  })
+
+  it('manual commands while idle go through the queue (min gap, one in flight) and a manual /fish schedules nothing', async () => {
+    const { client, engine, names, state } = setup(withTarget)
+    await engine.sendManual('fish')
+    await engine.sendManual('quests')
+    expect(names()).toEqual(['fish']) // waits for the reply / min gap
+    client.emitBot(oneFish)
+    expect(state.snapshot().session.catches).toBe(1)
+    await tick(2_499)
+    expect(names()).toEqual(['fish'])
+    await tick(2)
+    expect(names()).toEqual(['fish', 'quests'])
+    client.emitBot(QUESTS_REPLY)
+    expect(state.snapshot().quests).toHaveLength(1)
+    await tick(10 * 60_000)
+    expect(names()).toEqual(['fish', 'quests'])
+    expect(engine.state).toBe('idle')
+  })
+
+  it('an unanswered manual command times out without retry or pause', async () => {
+    const { client, engine, names } = setup(withTarget)
+    await engine.sendManual('profile')
+    await engine.sendManual('quests')
+    await tick(8_000)
+    expect(names()).toEqual(['profile', 'quests'])
+    await tick(10 * 60_000)
+    expect(names()).toEqual(['profile', 'quests'])
+    expect(engine.state).toBe('idle')
+    expect(client.sent).toHaveLength(2)
+  })
+
+  it('works after a stop (channel kept) and in error; refused without a target', async () => {
+    const a = setup(withTarget)
+    await a.engine.start(A)
+    a.engine.stop()
+    expect(a.client.activeChannel).toBe('A')
+    await a.engine.sendManual('profile')
+    await tick(3_000)
+    expect(a.names()).toEqual(['fish', 'profile'])
+
+    const b = setup(withTarget)
+    b.client.commands = b.client.commands.filter((c) => c.name !== 'fish')
+    await b.engine.start(A)
+    expect(b.engine.state).toBe('error')
+    await b.engine.sendManual('profile')
+    expect(b.client.sent).toEqual([{ channelId: 'A', command: 'profile', options: undefined }])
+
+    const c = setup()
+    await expect(c.engine.sendManual('profile')).rejects.toThrow('Choose a channel first')
+    expect(c.client.sent).toHaveLength(0)
+  })
+
+  it('a daily cooldown answering a manual /daily sets nextDailyAt; nothing is re-sent', async () => {
+    const { client, engine, names, state } = setup(withTarget)
+    const t0 = Date.now()
+    await engine.sendManual('daily')
+    client.emitBot(realForEngine('daily-cooldown'))
+    const wait = ((10 * 60 + 20) * 60 + 25) * 1000
+    expect(state.snapshot().nextDailyAt).toBeGreaterThanOrEqual(t0 + wait)
+    expect(state.snapshot().nextDailyAt).toBeLessThanOrEqual(t0 + wait + 1_000)
+    await tick(15 * 60_000)
+    expect(names()).toEqual(['daily'])
+  })
+
+  it('useTarget loads the commands once per guild, emits them and listens to the channel', async () => {
+    const { client, engine } = setup()
+    const emitted: number[] = []
+    engine.onCommands((cmds) => emitted.push(cmds.length))
+    await engine.useTarget(A)
+    expect(client.activeChannel).toBe('A')
+    expect(emitted).toEqual([client.commands.length])
+    await engine.useTarget(B) // same guild: cached
+    expect(client.activeChannel).toBe('B')
+    expect(client.commandsCalls).toEqual(['g1'])
+    expect(emitted).toHaveLength(2)
+    await engine.useTarget({ guildId: 'g2', channelId: 'C' })
+    expect(client.commandsCalls).toEqual(['g1', 'g2'])
+
+    client.failCommands = true
+    await expect(engine.useTarget({ guildId: 'g3', channelId: 'D' })).rejects.toThrow(/commands/i)
+    expect(emitted.at(-1)).toBe(0) // buttons: "Command unavailable"
+    expect(engine.availableCommands).toEqual([])
+  })
+
+  it('detach (logout) forgets the target, nulls the channel and empties the commands', async () => {
+    const { client, engine } = setup()
+    await engine.useTarget(A)
+    const emitted: number[] = []
+    engine.onCommands((cmds) => emitted.push(cmds.length))
+    engine.detach()
+    expect(client.activeChannel).toBeNull()
+    expect(emitted).toEqual([0])
+    expect(engine.state).toBe('idle')
+  })
+
+  it('captcha answering an idle manual command: captcha state, only the user verify, back to idle after the solve', async () => {
+    const { client, engine, names, states, state } = setup(withTarget)
+    await engine.sendManual('profile')
+    client.emitBot(CAPTCHA)
+    expect(engine.state).toBe('captcha')
+    expect(state.snapshot().session.captchas).toBe(1)
+    await engine.sendManual('profile') // refused
+    await tick(5 * 60_000)
+    expect(names()).toEqual(['profile'])
+
+    engine.submitCaptcha('ABC')
+    await tick(3_000)
+    expect(names()).toEqual(['profile', 'verify'])
+    client.emitBot(SOLVED)
+    expect(engine.state).toBe('captcha')
+    await tick(15_100)
+    expect(engine.state).toBe('idle')
+    expect(states.at(-1)).toEqual({ s: 'idle', info: {} })
+    await tick(10 * 60_000)
+    expect(names()).toEqual(['profile', 'verify']) // never fishes on its own
+
+    // manual mode works again afterwards
+    await engine.sendManual('quests')
+    await tick(3_000)
+    expect(names()).toEqual(['profile', 'verify', 'quests'])
+  })
+
+  it('a captcha from idle stays idle after the solve even if the connection dropped meanwhile', async () => {
+    const { client, engine, names } = setup(withTarget)
+    await engine.sendManual('profile')
+    client.emitBot(CAPTCHA)
+    client.emitDisconnect()
+    client.emitBot(SOLVED)
+    await tick(15_100)
+    expect(engine.state).toBe('idle')
+    await tick(5 * 60_000)
+    expect(engine.state).toBe('idle')
+    expect(names()).toEqual(['profile'])
+  })
+
+  it('« Stop fishing » from a captcha entered while idle → idle, nothing sent', async () => {
+    const { client, engine, names } = setup(withTarget)
+    await engine.sendManual('profile')
+    client.emitBot(CAPTCHA)
+    engine.stop()
+    expect(engine.state).toBe('idle')
+    await tick(5 * 60_000)
+    expect(names()).toEqual(['profile'])
+  })
+
+  it('manual commands are refused while stopping and connecting', async () => {
+    const a = setup(withTarget)
+    await a.engine.start(A)
+    a.engine.stop({ graceful: true })
+    expect(a.engine.state).toBe('stopping')
+    await a.engine.sendManual('daily')
+    await tick(30_000)
+    expect(a.names()).not.toContain('daily')
+
+    const b = setup(withTarget)
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const real = b.client.getBotCommands.bind(b.client)
+    b.client.getBotCommands = async (g) => {
+      await gate
+      return real(g)
+    }
+    const starting = b.engine.start(A)
+    expect(b.engine.state).toBe('connecting')
+    await b.engine.sendManual('daily')
+    release()
+    await starting
+    await tick(5_000)
+    expect(b.names()).not.toContain('daily')
   })
 })
