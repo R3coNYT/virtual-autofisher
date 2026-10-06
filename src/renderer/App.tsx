@@ -1,6 +1,7 @@
 import { Background } from './components/Background'
 import { Placeholder } from './components/Placeholder'
 import { Splash } from './components/Splash'
+import Dashboard from './screens/Dashboard'
 import Onboarding from './screens/Onboarding'
 import ServerPicker from './screens/ServerPicker'
 import { useApiEvents, useStore } from './store'
@@ -16,7 +17,7 @@ export default function App(): JSX.Element {
     case 'picker':
       return <ServerPicker />
     case 'dashboard':
-      return <Placeholder title="Dashboard" />
+      return <Dashboard />
     case 'settings':
       return <Placeholder title="Settings" />
     default:

@@ -105,6 +105,12 @@ export default function ServerPicker(): JSX.Element {
       await window.api.target.set(guild.id, channelId)
       const s = useStore.getState()
       s.setTarget({ guildId: guild.id, channelId })
+      s.setTargetNames({
+        guildId: guild.id,
+        channelId,
+        guildName: guild.name,
+        channelName: channels?.find((c) => c.id === channelId)?.name ?? channelId
+      })
       s.goto('dashboard')
     } catch (e) {
       setSaveError(cleanError(e))

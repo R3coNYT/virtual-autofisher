@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { ConnectionStatus } from '../shared/ipc'
 import { DEFAULT_CONFIG } from '../shared/types'
-import type { Config, DeepPartial, EngineState, GameSnapshot, LogEntry, SelfUser } from '../shared/types'
+import type { Config, DeepPartial, EngineState, GameSnapshot, LogEntry, SelfUser, SlashCommandInfo } from '../shared/types'
 import { applyGamePatch, emptySnapshot } from './applyGamePatch'
 import { appendCapped } from './logBuffer'
 import { resolveFirstScreen } from './resolveFirstScreen'
@@ -10,12 +10,17 @@ import { resolveFirstScreen } from './resolveFirstScreen'
 export type Screen = 'splash' | 'onboarding' | 'picker' | 'dashboard' | 'settings'
 export type Target = { guildId: string; channelId: string }
 export type CaptchaState = { imageUrl?: string; text?: string } | null
+/** Human names of the chosen server/channel, kept alongside the ids (display only). */
+export type TargetNames = { guildId: string; channelId: string; guildName: string; channelName: string }
 export type Toast = { id: number; level: 'info' | 'success' | 'error'; message: string }
 
 type State = {
   screen: Screen
   user: SelfUser | null
   target: Target | null
+  targetNames: TargetNames | null
+  /** Slash commands discovered by the engine (empty until known). */
+  commands: SlashCommandInfo[]
   connection: ConnectionStatus | null
   /** Detail shown on the splash while waiting (e.g. network retry). */
   connectionMessage: string | null
@@ -36,17 +41,30 @@ type Actions = {
   appendLog(entries: LogEntry[]): void
   setUser(user: SelfUser | null): void
   setTarget(target: Target | null): void
+  setTargetNames(names: TargetNames): void
   setLoggingIn(v: boolean): void
   pushToast(t: Omit<Toast, 'id'>): void
   dismissToast(id: number): void
 }
 
 let toastId = 0
+const NAMES_KEY = 'vaf.targetNames'
+
+function loadTargetNames(): TargetNames | null {
+  try {
+    const raw = localStorage.getItem(NAMES_KEY)
+    return raw ? (JSON.parse(raw) as TargetNames) : null
+  } catch {
+    return null
+  }
+}
 
 export const useStore = create<State & Actions>((set) => ({
   screen: 'splash',
   user: null,
   target: null,
+  targetNames: loadTargetNames(),
+  commands: [],
   connection: null,
   connectionMessage: null,
   authError: null,
@@ -63,6 +81,14 @@ export const useStore = create<State & Actions>((set) => ({
   appendLog: (entries) => set((s) => ({ log: appendCapped(s.log, entries) })),
   setUser: (user) => set({ user }),
   setTarget: (target) => set({ target }),
+  setTargetNames: (names) => {
+    set({ targetNames: names })
+    try {
+      localStorage.setItem(NAMES_KEY, JSON.stringify(names))
+    } catch {
+      /* storage unavailable: names stay in memory only */
+    }
+  },
   setLoggingIn: (loggingIn) => set({ loggingIn }),
   pushToast: (t) => set((s) => ({ toasts: [...s.toasts, { ...t, id: ++toastId }].slice(-4) })),
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
@@ -107,6 +133,7 @@ export function useApiEvents(): void {
           captcha: state === 'captcha' ? { imageUrl: info?.captchaImageUrl, text: info?.captchaText } : s.captcha
         }))
       }),
+      api.on('engine.commands', (commands) => st.setState({ commands })),
       api.on('game.patch', (p) => st.getState().applyPatch(p)),
       api.on('log.append', (e) => st.getState().appendLog(e)),
       api.on('captcha.show', (c) => st.setState({ captcha: { imageUrl: c.imageUrl, text: c.text } })),
@@ -123,6 +150,10 @@ export function useApiEvents(): void {
     api.config
       .get()
       .then((config) => !cancelled && st.setState({ config }))
+      .catch(() => undefined)
+    api.engine
+      .commands()
+      .then((commands) => !cancelled && st.setState({ commands }))
       .catch(() => undefined)
     void syncFromMain()
 
