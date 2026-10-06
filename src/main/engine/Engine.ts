@@ -222,6 +222,8 @@ export class Engine {
       this.failures = 0
     }
     this.guard(() => this.route(parseMessage(m, Date.now()), replyTo))
+    // Settled after routing: a captcha replying to it has already scheduled its re-request.
+    if (replyTo) this.guard(() => this.scheduler.onSettled(replyTo))
     // Notified last: a captcha must have paused the queue before it can pump again.
     if (!m.isEdit) this.queue.notifyResponse()
   }
@@ -234,6 +236,8 @@ export class Engine {
     if (ev.kind === 'error' && /enough/i.test(ev.text)) this.onNoFunds(replyTo)
     this.scheduler.onEvent(ev)
     if (replyTo?.name === 'fish' && ev.kind !== 'catch' && ev.kind !== 'cooldown') this.scheduler.retryFish()
+    // /boosts answered by something else: arm the buffs without endsAt rather than never
+    if (replyTo?.key === 'boosts' && ev.kind !== 'boosts') this.scheduler.onCommandFailed(replyTo)
   }
 
   private onNoFunds(replyTo: QueuedCommand | null): void {
@@ -246,6 +250,7 @@ export class Engine {
 
   private onNoAnswer(c: QueuedCommand, cause: unknown): void {
     if (this.awaiting === c) this.awaiting = null
+    this.scheduler.onSettled(c) // a maintenance retry below is tracked again
     if (!ACTIVE.includes(this.current)) return
     if (cause !== 'timeout') this.logger.warn(`Envoi de /${c.name} impossible`, cause)
     this.failures++
@@ -266,7 +271,8 @@ export class Engine {
     }
     const again: QueuedCommand = { ...c }
     this.retries.add(again)
-    this.queue.push(again)
+    if (c.priority === 'maintenance') this.scheduler.pushRetry(again) // tracked: survives a captcha clear
+    else this.queue.push(again)
   }
 
   private onDisconnected(): void {
@@ -304,7 +310,6 @@ export class Engine {
     if (!target) throw new Error('Aucun salon actif')
     this.awaiting = c
     if (c.priority === 'maintenance') this.lastMaintenanceKey = c.key
-    this.scheduler.onSent(c)
     this.gameState.markCommandSent(c.name)
     const opts = c.options && Object.keys(c.options).length ? c.options : undefined
     await this.client.sendSlash(target.channelId, c.name, opts)

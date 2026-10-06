@@ -41,7 +41,7 @@ export class Scheduler {
   private running = false
   private frozen = false
   private resting = false
-  /** Maintenance commands pushed and not yet sent, by dedupe key. */
+  /** Maintenance commands pushed and not yet answered (queued or in flight), by dedupe key. */
   private pending = new Map<string, QueuedCommand>()
   private buyBlockedUntil = { buff: -Infinity, bait: -Infinity }
   private readonly rand: () => number
@@ -134,19 +134,25 @@ export class Scheduler {
     if (this.running) this.fishAfter(fishDelayMs(this.getConfig().fishing, this.rand))
   }
 
-  /** A queued command was sent: it is no longer at risk of being dropped by a queue clear. */
-  onSent(c: QueuedCommand): void {
+  /** The command got its reply, or failed: it no longer needs re-requesting after a captcha. */
+  onSettled(c: QueuedCommand): void {
     if (c.key !== undefined && this.pending.get(c.key) === c) this.pending.delete(c.key)
   }
 
-  /** A maintenance command got no answer even after its retry. */
+  /** Engine retry of a timed-out maintenance command: queued and tracked like any other. */
+  pushRetry(c: QueuedCommand): void {
+    if (!this.running || !this.queue.push(c)) return
+    if (c.key !== undefined) this.pending.set(c.key, c)
+  }
+
+  /** A maintenance command got no usable answer (none after its retry, or not the expected kind). */
   onCommandFailed(c: QueuedCommand): void {
     if (this.running && c.key === 'boosts') this.armBuffs(this.buffGraceMs()) // fallback without endsAt
   }
 
   /**
-   * The queue was emptied (captcha): every maintenance command still waiting in it is
-   * requested again 5–30 s after the scheduler thaws (the timers are frozen until then).
+   * The queue was emptied (captcha): every maintenance command still waiting in it, or in
+   * flight without a reply yet, is requested again 5–30 s after the scheduler thaws (the timers are frozen until then).
    */
   onQueueCleared(): void {
     for (const [key, cmd] of this.pending) {
