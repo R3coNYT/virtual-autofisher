@@ -135,12 +135,33 @@ describe('registerHandlers', () => {
     await call('engine.start')
     client.emitBot(fixture('catch-basic'))
     const startedAt = state.snapshot().session.startedAt
-    await call('engine.stop')
+    await call('engine.stop', false)
     const files = readdirSync(join(dir, 'sessions'))
     expect(files).toEqual([`${startedAt}.json`])
     const summary = JSON.parse(readFileSync(join(dir, 'sessions', files[0]), 'utf8'))
     expect(summary.catches).toBe(3)
     expect(summary.endedAt).toBeGreaterThan(0)
+  })
+
+  it('engine.stop is graceful by default (stopping → /profile, /quests → idle); false halts at once', async () => {
+    const { call, config, client, engine } = setup()
+    config.update({ target: T })
+    await call('engine.start')
+    client.emitBot(fixture('catch-basic'))
+    await call('engine.stop')
+    expect(engine.state).toBe('stopping')
+    await vi.advanceTimersByTimeAsync(25_000)
+    expect(engine.state).toBe('idle')
+    expect(client.sent.map((s) => s.command)).toEqual(['fish', 'profile', 'quests'])
+
+    await call('engine.start')
+    await call('engine.stop', false)
+    expect(engine.state).toBe('idle')
+    await call('engine.start')
+    await call('engine.stop', true)
+    expect(engine.state).toBe('stopping')
+    await call('engine.stop', true) // second click: immediate
+    expect(engine.state).toBe('idle')
   })
 
   it('relays engine.state, engine.commands, game.patch and captcha show/hide', async () => {

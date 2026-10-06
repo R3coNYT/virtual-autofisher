@@ -5,6 +5,7 @@ import { Engine } from '../../src/main/engine/Engine'
 import { GameState } from '../../src/main/engine/GameState'
 import { DEFAULT_CONFIG, type BotMessage, type Config, type EngineState } from '../../src/shared/types'
 import { FakeDiscordClient } from '../helpers/FakeDiscordClient'
+import { realForEngine } from '../helpers/realFixture'
 
 /** Fixture without id/channelId so FakeDiscordClient delivers it to the active channel. */
 const msg = (name: string): Partial<BotMessage> => {
@@ -347,7 +348,7 @@ describe('Engine', () => {
     await engine.start(A)
     await tick(59 * 60_000)
     expect(engine.state).not.toBe('idle')
-    await tick(60_000)
+    await tick(60_000 + 25_000) // graceful stop: at most 25 s of /profile + /quests
     expect(engine.state).toBe('idle')
     expect(client.activeChannel).toBeNull()
   })
@@ -602,7 +603,8 @@ describe('Engine', () => {
     expect(got).toHaveLength(1)
     expect(got[0].catches).toBe(3)
     expect(got[0].endedAt).toBeGreaterThan(0)
-    expect(state.snapshot().session.startedAt).toBeNull()
+    // the finished session stays visible until the next start
+    expect(state.snapshot().session.catches).toBe(3)
     expect(logger.error).toHaveBeenCalled()
   })
 
@@ -795,5 +797,225 @@ describe('Engine: leaving a captcha', () => {
     expect(engine.state).toBe('idle')
     await tick(60_000)
     expect(names()).toEqual(['fish'])
+  })
+})
+
+const PROFILE_REPLY: Partial<BotMessage> = {
+  embeds: [
+    {
+      title: 'Inventory of Player',
+      description: 'Balance: $1,000.\nLevel 3, 10/100 XP to next level.\nFish Value: $500',
+      fields: []
+    }
+  ]
+}
+const QUESTS_REPLY: Partial<BotMessage> = {
+  embeds: [{ title: 'Quest List', description: '**Daily Fishing** - 1/5', fields: [] }]
+}
+const gracefulReply = (cmd: string): Partial<BotMessage> | null =>
+  cmd === 'profile' ? PROFILE_REPLY : cmd === 'quests' ? QUESTS_REPLY : cmd === 'fish' ? oneFish : null
+
+describe('Engine: graceful stop', () => {
+  it('stops fishing, sends /profile then /quests, ends idle once both answered', async () => {
+    const { client, engine, names, state, states } = setup()
+    autoReply(client, gracefulReply)
+    await engine.start(A)
+    await tick(10_000)
+    const before = names().length
+    expect(names().every((n) => n === 'fish')).toBe(true)
+
+    engine.stop({ graceful: true })
+    expect(engine.state).toBe('stopping')
+    expect(state.snapshot().nextFishAt).toBeNull()
+    await tick(10_000)
+    expect(names().slice(before)).toEqual(['profile', 'quests'])
+    expect(engine.state).toBe('idle')
+    expect(states.at(-1)).toEqual({ s: 'idle', info: {} })
+    expect(state.snapshot().account.fishValue).toBe(500)
+    expect(state.snapshot().quests).toHaveLength(1)
+    expect(client.activeChannel).toBeNull()
+    await tick(60_000)
+    expect(names().slice(before)).toEqual(['profile', 'quests'])
+  })
+
+  it('without answers: no retry, idle within 25 s even behind an unanswered /fish', async () => {
+    const { client, engine, names } = setup()
+    await engine.start(A) // /fish in flight, never answered: profile at 8 s, quests at 16 s
+    engine.stop({ graceful: true })
+    await tick(23_000)
+    expect(engine.state).toBe('stopping')
+    await tick(2_000)
+    expect(engine.state).toBe('idle')
+    expect(names()).toEqual(['fish', 'profile', 'quests'])
+    await tick(60_000)
+    expect(client.sent).toHaveLength(3)
+  })
+
+  it('the whole graceful stop is capped at 25 s', async () => {
+    const { client, engine, names } = setup()
+    autoReply(client, (cmd) => (cmd === 'fish' ? oneFish : null))
+    await engine.start(A)
+    await tick(1_000)
+    engine.stop({ graceful: true })
+    client.emitRateLimited(60_000) // nothing can leave before the cap
+    await tick(24_900)
+    expect(engine.state).toBe('stopping')
+    await tick(200)
+    expect(engine.state).toBe('idle')
+    await tick(60_000)
+    expect(names()).toEqual(['fish'])
+  })
+
+  it('timeouts move on to the next command without retrying it', async () => {
+    const { client, engine, names } = setup()
+    autoReply(client, (cmd) => (cmd === 'fish' ? oneFish : null))
+    await engine.start(A)
+    await tick(1_000)
+    engine.stop({ graceful: true })
+    await tick(2_000 + 8_000 + 2_500)
+    expect(names()).toEqual(['fish', 'profile', 'quests'])
+    await tick(8_000)
+    expect(engine.state).toBe('idle')
+    expect(names()).toEqual(['fish', 'profile', 'quests'])
+  })
+
+  it('a second stop while stopping halts immediately', async () => {
+    const { client, engine, names } = setup()
+    autoReply(client, (cmd) => (cmd === 'fish' ? oneFish : null))
+    await engine.start(A)
+    await tick(1_000)
+    engine.stop({ graceful: true })
+    expect(engine.state).toBe('stopping')
+    engine.stop({ graceful: true })
+    expect(engine.state).toBe('idle')
+    await tick(30_000)
+    expect(names()).toEqual(['fish'])
+  })
+
+  it('no command to refresh: halts immediately', async () => {
+    const { client, engine } = setup()
+    client.commands = client.commands.filter((c) => c.name !== 'profile' && c.name !== 'quests')
+    await engine.start(A)
+    engine.stop({ graceful: true })
+    expect(engine.state).toBe('idle')
+  })
+
+  it('the session limit stops gracefully with its reason', async () => {
+    const { client, engine, names, states } = setup((c) => {
+      c.sessionLimitH = 1
+    })
+    autoReply(client, gracefulReply)
+    await engine.start(A)
+    await tick(60 * 60_000 + 15_000)
+    expect(states.some((x) => x.s === 'stopping')).toBe(true)
+    expect(engine.state).toBe('idle')
+    expect(states.at(-1)).toEqual({ s: 'idle', info: { reason: 'Limite de session atteinte' } })
+    expect(names().slice(-2)).toEqual(['profile', 'quests'])
+  })
+
+  it('captcha during stopping: frozen, only the user verify; after solve the stop resumes and ends idle', async () => {
+    const { client, engine, names } = setup()
+    autoReply(client, (cmd) => (cmd === 'fish' ? oneFish : null))
+    await engine.start(A)
+    await tick(1_000)
+    engine.stop({ graceful: true })
+    await tick(2_000) // profile sent at 2.5 s
+    expect(names()).toEqual(['fish', 'profile'])
+    client.emitBot(CAPTCHA) // answers the profile with a captcha
+    expect(engine.state).toBe('captcha')
+    await tick(5 * 60_000) // the 25 s budget is frozen during the captcha
+    expect(engine.state).toBe('captcha')
+    expect(names()).toEqual(['fish', 'profile'])
+
+    engine.submitCaptcha('ABC')
+    await tick(3_000)
+    expect(names()).toEqual(['fish', 'profile', 'verify'])
+    client.emitBot(SOLVED)
+    await tick(10_100) // resume after 10 s (rand 0.5)
+    expect(engine.state).toBe('stopping')
+    await tick(3_000)
+    expect(names().slice(3)).toEqual(['profile']) // the unanswered /profile is sent again
+    client.emitBot(PROFILE_REPLY)
+    await tick(3_000)
+    expect(names().slice(3)).toEqual(['profile', 'quests'])
+    client.emitBot(QUESTS_REPLY)
+    expect(engine.state).toBe('idle')
+    expect(names().filter((n) => n === 'fish')).toHaveLength(1)
+  })
+
+  it('« Arrêter la pêche » during a captcha in stopping halts at once', async () => {
+    const { client, engine, names } = setup()
+    autoReply(client, (cmd) => (cmd === 'fish' ? oneFish : null))
+    await engine.start(A)
+    await tick(1_000)
+    engine.stop({ graceful: true })
+    client.emitBot(CAPTCHA)
+    expect(engine.state).toBe('captcha')
+    engine.stop({ graceful: false })
+    expect(engine.state).toBe('idle')
+    await tick(60_000)
+    expect(names()).toEqual(['fish'])
+  })
+
+  it('hard stop (default) stays immediate', async () => {
+    const { client, engine, names } = setup()
+    autoReply(client, gracefulReply)
+    await engine.start(A)
+    await tick(5_000)
+    const n = names().length
+    engine.stop()
+    expect(engine.state).toBe('idle')
+    await tick(60_000)
+    expect(names()).toHaveLength(n)
+  })
+})
+
+describe('Engine: real captures', () => {
+  it('a catch completing a quest refreshes /quests', async () => {
+    const { client, engine, names, state } = setup()
+    await engine.start(A)
+    client.emitBot(realForEngine('catch-levelup-quest'))
+    await tick(2_500)
+    expect(names()).toEqual(['fish', 'quests'])
+    expect(state.snapshot().log.some((l) => l.highlight && l.text === 'Quête terminée : Daily Level-ups Tier 3')).toBe(true)
+    expect(state.snapshot().session.rareCaught.gold).toBe(6)
+  })
+
+  it('"Daily reward on cooldown" in reply to /daily sets nextDailyAt and does not touch fishing', async () => {
+    const { client, engine, names, state } = setup((c) => {
+      c.daily.enabled = true
+    })
+    autoReply(client, (cmd) => (cmd === 'daily' ? realForEngine('daily-cooldown') : oneFish))
+    const t0 = Date.now()
+    await engine.start(A)
+    await tick(5_000)
+    expect(names().filter((n) => n === 'daily')).toHaveLength(1)
+    const wait = ((10 * 60 + 20) * 60 + 25) * 1000
+    const next = state.snapshot().nextDailyAt!
+    expect(next).toBeGreaterThanOrEqual(t0 + wait)
+    expect(next).toBeLessThanOrEqual(t0 + 5_000 + wait)
+    expect(engine.state).toBe('running')
+    expect(names().filter((n) => n === 'fish').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('another player editing our catch (« no fish to sell ») is never logged nor counted', async () => {
+    const { client, engine, state } = setup()
+    await engine.start(A)
+    client.emitBot(realForEngine('catch-before-edit'))
+    const after = state.snapshot()
+    expect(after.session.catches).toBe(18)
+    client.emitBot(realForEngine('edit-other-player'))
+    const now = state.snapshot()
+    expect(now.session).toEqual(after.session)
+    expect(now.log).toEqual(after.log)
+  })
+
+  it('such an edit of a message we never saw is dropped too', async () => {
+    const { client, engine, state } = setup()
+    await engine.start(A)
+    const logLen = state.snapshot().log.length
+    client.emitBot(realForEngine('edit-other-player'))
+    expect(state.snapshot().log).toHaveLength(logLen)
+    expect(engine.state).toBe('running')
   })
 })

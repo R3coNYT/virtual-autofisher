@@ -16,7 +16,7 @@ const api: Api = {
     start: () => invoke('engine.start'),
     pause: () => invoke('engine.pause'),
     resume: () => invoke('engine.resume'),
-    stop: () => invoke('engine.stop'),
+    stop: (graceful) => invoke('engine.stop', graceful),
     commands: () => invoke('engine.commands'),
     status: () => invoke('engine.status')
   },

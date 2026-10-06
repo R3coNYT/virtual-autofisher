@@ -69,7 +69,11 @@ export type Api = {
     start(): Promise<void>
     pause(): Promise<void>
     resume(): Promise<void>
-    stop(): Promise<void>
+    /**
+     * Graceful by default (fishing stops, /profile and /quests refresh the data, then idle);
+     * `false` halts at once. A stop while already stopping, or during a captcha, always halts at once.
+     */
+    stop(graceful?: boolean): Promise<void>
     commands(): Promise<SlashCommandInfo[]>
     /** Current state, captcha and game snapshot (renderer reload). */
     status(): Promise<EngineStatus>

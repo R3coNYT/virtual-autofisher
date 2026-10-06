@@ -104,6 +104,10 @@ export class Scheduler {
         this.fishAfter(fishDelayMs(cfg.fishing, this.rand))
         if (cfg.sell.enabled && cfg.sell.mode === 'catches' && this.state.catchesSinceSell >= cfg.sell.every) this.pushSell()
         this.maybeBait(false)
+        // a quest just completed: refresh the quest list now rather than at the next 30 min tick
+        if (e.questsCompleted?.length && this.has('quests')) {
+          this.push({ name: 'quests', priority: 'maintenance', key: 'quests' })
+        }
         break
       case 'cooldown':
         this.fishAfter(e.waitMs + randomBetweenMs(0.2, 1, this.rand))

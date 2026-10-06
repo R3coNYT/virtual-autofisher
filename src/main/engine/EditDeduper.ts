@@ -30,6 +30,9 @@ export class EditDeduper {
       if (prev && prev.kind === ev.kind && prev.text === norm) accepted = false // unchanged
       else if (ev.kind === 'captcha' && this.solvedIds.has(id)) accepted = false // already solved
       else if (prev && !CAPTCHA_KINDS.includes(ev.kind) && COUNTED.includes(prev.kind)) accepted = false
+      // an edit of a message we never saw (sent before the session, or forgotten): typically another
+      // player clicking a button of an old reply of ours. Only a captcha or a cooldown may matter then.
+      else if (!prev && !CAPTCHA_KINDS.includes(ev.kind) && ev.kind !== 'cooldown') accepted = false
     }
     // a counted kind stays the reference: later edits of that message are never counted either
     const kind = !accepted && prev && COUNTED.includes(prev.kind) ? prev.kind : ev.kind

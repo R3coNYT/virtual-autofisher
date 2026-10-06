@@ -209,7 +209,7 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
     const was = engine.state
     config.update({ target })
     if (was === 'running' || was === 'resting') await engine.start(target) // stops the old session itself
-    else if (was === 'paused') engine.stop() // resuming would fish in the old channel
+    else if (was === 'paused' || was === 'stopping') engine.stop() // resuming would fish in the old channel
     if (engine.availableCommands.length) send('engine.commands', engine.availableCommands)
   })
 
@@ -223,7 +223,10 @@ export function registerHandlers(deps: HandlerDeps): { autoLogin(): Promise<void
   handle('engine.start', startEngine)
   handle('engine.pause', () => engine.pause())
   handle('engine.resume', () => engine.resume())
-  handle('engine.stop', () => engine.stop())
+  // graceful unless told otherwise; during a captcha « Arrêter » always means now
+  handle('engine.stop', (graceful?: unknown) =>
+    engine.stop({ graceful: graceful !== false && engine.state !== 'captcha' })
+  )
   handle('engine.commands', () => engine.availableCommands)
   handle('engine.status', (): EngineStatus => {
     const s = engine.state

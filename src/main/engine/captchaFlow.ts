@@ -21,13 +21,16 @@ export type CaptchaDeps = {
   /** Non-null when the engine must go back to paused after the captcha (user pause, network). */
   pauseReason: () => PauseReason | null
   setState: (s: EngineState, info?: EngineInfo) => void
-  /** Leaves the captcha (scheduler already thawed): running or resting, queue resumed accordingly. */
+  /**
+   * Leaves the captcha (scheduler already thawed): running or resting, queue resumed accordingly,
+   * or back to 'stopping' when a graceful stop was under way.
+   */
   activate: () => void
   guard: (fn: () => void) => void
 }
 
 /** States in which a captcha takes over the engine. In idle/error nothing is being sent anyway. */
-const WATCHED: EngineState[] = ['connecting', 'running', 'paused', 'resting', 'captcha']
+const WATCHED: EngineState[] = ['connecting', 'running', 'paused', 'resting', 'stopping', 'captcha']
 
 /**
  * Captcha safety. On a captcha the queue is emptied and paused and the scheduler frozen;

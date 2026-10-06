@@ -33,6 +33,22 @@ const SESSION_CHECK_MS = 15_000
 /** A non-fish command answered by "wait N" is re-sent once after N when N is at most this long. */
 const DEFER_MAX_MS = 10 * 60_000
 const ACTIVE: EngineState[] = ['running', 'paused', 'resting']
+/** Graceful stop: data refreshed before halting, each only if the guild exposes the command. */
+const GRACEFUL_COMMANDS = ['profile', 'quests']
+/** Graceful stop budget (time spent in a captcha not counted). */
+const GRACEFUL_MAX_MS = 25_000
+/** States a graceful stop can start from (captcha: it starts once the captcha is solved). */
+const GRACEFUL_FROM: EngineState[] = ['running', 'paused', 'resting', 'captcha']
+
+type GracefulStop = {
+  /** Commands not answered yet (nor timed out). */
+  remaining: string[]
+  budgetMs: number
+  armedAt: number
+  timer: ReturnType<typeof setTimeout> | null
+  /** Reason shown with the final idle state (session limit). */
+  reason?: string
+}
 
 const noopLogger: Logger = { info: () => {}, warn: () => {}, error: () => {} }
 
@@ -74,6 +90,8 @@ export class Engine {
   private sessionStartedAt = 0
   private networkTimer: ReturnType<typeof setTimeout> | null = null
   private sessionTimer: ReturnType<typeof setInterval> | null = null
+  /** Non-null from a graceful stop request until the engine is halted. */
+  private graceful: GracefulStop | null = null
 
   constructor(deps: EngineDeps) {
     this.client = deps.client
@@ -221,7 +239,13 @@ export class Engine {
     this.activate()
   }
 
-  stop(): void {
+  /**
+   * Hard stop by default: everything halts now. Graceful: fishing and every timer stop, then
+   * /profile and /quests refresh the data (≤ 25 s, no retry) before halting. A stop while a
+   * graceful stop is under way always halts at once.
+   */
+  stop(opts: { graceful?: boolean } = {}): void {
+    if (opts.graceful && !this.graceful) return this.stopGracefully()
     this.halt()
     this.setState('idle')
   }
@@ -271,6 +295,7 @@ export class Engine {
   private route(ev: GameEvent, replyTo: QueuedCommand | null): void {
     if (this.captcha.handle(ev)) return
     this.gameState.apply(ev) // stats/log only: GameState never sends anything
+    if (this.graceful) return void (replyTo && this.gracefulSettled(replyTo.name))
     // In captcha (and idle/connecting/error) nothing may trigger a command.
     if (!ACTIVE.includes(this.current)) return
     if (ev.kind === 'error' && /enough/i.test(ev.text)) this.onNoFunds(replyTo)
@@ -290,6 +315,7 @@ export class Engine {
       return this.scheduler.onEvent({ kind: 'cooldown', waitMs })
     }
     if (!replyTo || replyTo.priority === 'verify') return
+    if (replyTo.name === 'daily') this.gameState.setNextDailyAt(Date.now() + waitMs)
     const wait = formatWait(waitMs)
     if (waitMs <= DEFER_MAX_MS && !this.deferred.has(replyTo)) {
       const again: QueuedCommand = { ...replyTo }
@@ -316,6 +342,11 @@ export class Engine {
   private onNoAnswer(c: QueuedCommand, cause: unknown): void {
     if (this.awaiting === c) this.awaiting = null
     this.scheduler.onSettled(c) // a maintenance retry below is tracked again
+    if (this.graceful) {
+      // stopping: no retry, move on. In a captcha it stays due and is sent again after the solve.
+      if (this.current !== 'captcha') this.gracefulSettled(c.name)
+      return
+    }
     if (!ACTIVE.includes(this.current)) return
     if (cause !== 'timeout') this.logger.warn(`Envoi de /${c.name} impossible`, cause)
     this.failures++
@@ -384,6 +415,7 @@ export class Engine {
 
   /** Back to work after a pause or a captcha: running, or resting if a break is under way. */
   private activate(): void {
+    if (this.graceful) return this.continueGracefulStop() // a captcha interrupted the graceful stop
     if (this.scheduler.isResting) {
       this.queue.pause()
       this.setState('resting')
@@ -395,15 +427,78 @@ export class Engine {
 
   private checkSessionLimit(): void {
     const h = this.getConfig().sessionLimitH
-    if (!this.sessionActive || h <= 0 || Date.now() - this.sessionStartedAt < h * 3_600_000) return
+    if (!this.sessionActive || this.graceful || h <= 0 || Date.now() - this.sessionStartedAt < h * 3_600_000) return
     this.logger.info('Limite de session atteinte, arrêt du moteur')
+    this.stopGracefully('Limite de session atteinte')
+  }
+
+  // ---- graceful stop ------------------------------------------------------
+
+  private stopGracefully(reason?: string): void {
+    if (this.beginGracefulStop(reason)) return
     this.halt()
-    this.setState('idle', { reason: 'Limite de session atteinte' })
+    this.setState('idle', reason ? { reason } : {})
+  }
+
+  /** False when there is nothing to refresh (no target, no command, not fishing): halt instead. */
+  private beginGracefulStop(reason?: string): boolean {
+    const st = this.current
+    if (!GRACEFUL_FROM.includes(st) || !this.target) return false
+    const remaining = GRACEFUL_COMMANDS.filter((n) => this.commands.some((c) => c.name === n))
+    if (!remaining.length) return false
+    this.scheduler.stop() // /fish and every periodic timer
+    if (st !== 'captcha') this.queue.clear() // in a captcha the queue only ever holds the user's /verify
+    this.pauseReason = null
+    this.graceful = { remaining, budgetMs: GRACEFUL_MAX_MS, armedAt: 0, timer: null, reason }
+    this.logger.info('Arrêt propre : actualisation du profil et des quêtes')
+    // captcha: nothing is sent until it is solved; activate() then continues the stop
+    if (st !== 'captcha') this.continueGracefulStop()
+    return true
+  }
+
+  /** (Re)sends what is still unanswered and arms the remaining budget. */
+  private continueGracefulStop(): void {
+    const g = this.graceful
+    if (!g) return
+    if (!g.remaining.length) return this.finishGracefulStop()
+    this.setState('stopping')
+    for (const name of g.remaining) {
+      // already in flight (e.g. a scheduled /profile): its reply or timeout settles it
+      if (this.awaiting?.name !== name) this.queue.push({ name, priority: 'maintenance', key: name })
+    }
+    this.queue.resume()
+    g.armedAt = Date.now()
+    g.timer = setTimeout(() => this.guard(() => this.finishGracefulStop()), Math.max(0, g.budgetMs))
+  }
+
+  /** A graceful command got its reply or timed out. */
+  private gracefulSettled(name: string): void {
+    const g = this.graceful
+    if (!g) return
+    g.remaining = g.remaining.filter((n) => n !== name)
+    if (!g.remaining.length && this.current === 'stopping') this.finishGracefulStop()
+  }
+
+  /** A captcha interrupts the stop: its budget is frozen until the captcha is solved. */
+  private suspendGracefulTimer(): void {
+    const g = this.graceful
+    if (!g?.timer) return
+    clearTimeout(g.timer)
+    g.timer = null
+    g.budgetMs -= Date.now() - g.armedAt
+  }
+
+  private finishGracefulStop(): void {
+    const reason = this.graceful?.reason
+    this.halt()
+    this.setState('idle', reason ? { reason } : {})
   }
 
   /** Stops every source of commands; the caller sets the resulting state. */
   private halt(): void {
     this.gen++
+    if (this.graceful?.timer) clearTimeout(this.graceful.timer)
+    this.graceful = null
     this.captcha.reset()
     this.scheduler.stop()
     this.queue.clear()
@@ -441,6 +536,7 @@ export class Engine {
   }
 
   private setState(s: EngineState, info: EngineInfo = {}): void {
+    if (s === 'captcha') this.suspendGracefulTimer()
     this.current = s
     this.currentInfo = { ...info }
     for (const cb of [...this.listeners]) {
