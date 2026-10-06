@@ -403,9 +403,10 @@ describe('Engine', () => {
     client.emitBot(boostsMsg('Fish Boost: 10m'))
     await run(client, 10 * 60_000 - 1000, (cmd) => (cmd === 'boosts' ? null : oneFish))
     expect(buys('fish5m')).toHaveLength(0)
-    expect(buys('treasure5m').length).toBeGreaterThan(0) // absent → bought 5–30 s after the reply
+    expect(buys('treasure5m')).toHaveLength(0) // a buff still active: wait until both are over
     await run(client, 60_000)
     expect(buys('fish5m')).toHaveLength(1)
+    expect(buys('treasure5m')).toHaveLength(1)
   })
 
   it('boosts reply with no active boost → buys 5–30 s later, not before', async () => {
@@ -441,7 +442,8 @@ describe('Engine', () => {
     })
     await engine.start(A)
     await run(client, 60_000, (cmd) => (cmd === 'boosts' ? null : oneFish))
-    expect(client.sent.filter((s) => s.command === 'boosts')).toHaveLength(2)
+    const firstBuy = client.sent.findIndex((s) => s.command === 'buy')
+    expect(client.sent.slice(0, firstBuy).filter((s) => s.command === 'boosts')).toHaveLength(2) // + its retry
     expect(client.sent.filter((s) => s.command === 'buy')).toHaveLength(2)
   })
 
@@ -472,7 +474,9 @@ describe('Engine', () => {
     await tick(10_000)
     expect(engine.state).toBe('running')
     await run(client, 60_000, (cmd) => (cmd === 'boosts' ? boostsMsg('None') : oneFish))
-    expect(client.sent.slice(n).filter((s) => s.command === 'boosts')).toHaveLength(1)
+    const after = client.sent.slice(n)
+    const firstBuy = after.findIndex((s) => s.command === 'buy')
+    expect(after.slice(0, firstBuy).filter((s) => s.command === 'boosts')).toHaveLength(1) // one fresh check
     expect(client.sent.filter((s) => s.command === 'buy')).toHaveLength(2)
   })
 
@@ -488,7 +492,9 @@ describe('Engine', () => {
     client.emitBot(SOLVED)
     await tick(10_000)
     await run(client, 60_000, (cmd) => (cmd === 'boosts' ? boostsMsg('None') : oneFish))
-    expect(client.sent.slice(n).filter((s) => s.command === 'boosts')).toHaveLength(1)
+    const after = client.sent.slice(n)
+    const firstBuy = after.findIndex((s) => s.command === 'buy')
+    expect(after.slice(0, firstBuy).filter((s) => s.command === 'boosts')).toHaveLength(1) // one fresh check
     expect(client.sent.filter((s) => s.command === 'buy')).toHaveLength(2)
   })
 

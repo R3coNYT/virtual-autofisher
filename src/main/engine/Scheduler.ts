@@ -53,6 +53,13 @@ export class Scheduler {
   private boosterUsed = false
   /** /boosters said 0: no more checks until the next session. */
   private boostersExhausted = false
+  /**
+   * Auto-buffs cycle: 'checking' (start /boosts) → 'buying' (fish + treasure + /boosts sent back
+   * to back) → 'waiting' (until BOTH buffs are over) → 'buying' … 'off' when buffs are disabled.
+   */
+  private buffPhase: 'off' | 'checking' | 'buying' | 'waiting' = 'off'
+  /** When the last pair of buffs was bought (fallback end when /boosts doesn't list them). */
+  private buffBoughtAt = 0
   private readonly rand: () => number
 
   constructor(
@@ -76,13 +83,10 @@ export class Scheduler {
     const cfg = this.getConfig()
     // data first (/profile, /boosts, daily, quests), then the first /fish: maintenance outranks fish
     this.loop('profile', () => this.profileTick(), true)
-    if (this.has('boosts')) {
-      // always refreshed at start; buff timers are armed from its reply (endsAt), or by onCommandFailed
-      this.pushBoosts()
-      if (!cfg.buffs.enabled) this.armBuffs(POLL_MS)
-    } else {
-      this.armBuffs(cfg.buffs.enabled ? this.buffGraceMs() : POLL_MS)
-    }
+    this.buffPhase = 'off'
+    if (this.has('boosts')) this.pushBoosts() // always refreshed at start (boost chips)
+    if (cfg.buffs.enabled && this.has('boosts')) this.buffPhase = 'checking' // its reply decides the first cycle
+    else this.armBuffCycle(cfg.buffs.enabled ? this.buffGraceMs() : POLL_MS)
     this.loop('daily', () => this.dailyTick(), true)
     this.loop('quests', () => this.questsTick(), true)
     this.loop('sell', () => this.sellTick(), false, this.sellIntervalMs() ?? POLL_MS)
@@ -132,21 +136,15 @@ export class Scheduler {
         this.maybeBait(true)
         break
       case 'boosts':
-        for (const type of ['fish', 'treasure'] as const) {
-          const b = e.active.find((x) => buffType(x.name) === type)
-          this.armBuff(type, (b ? Math.max(0, b.endsAt - Date.now()) : 0) + this.buffGraceMs())
-        }
+        this.onBuffBoosts(e.active)
         this.onBoosts(e.active)
         break
       case 'boosters':
         this.onBoosters(e.personal)
         break
-      case 'purchase': {
-        const type = buffType(e.item)
-        if (type) this.armBuff(type, cfg.buffs.lengthMin * MIN + this.buffGraceMs())
-        else this.pushProfile() // bait bought: refresh the estimate from the inventory
+      case 'purchase':
+        if (!buffType(e.item)) this.pushProfile() // bait bought: refresh the estimate from the inventory
         break
-      }
     }
   }
 
@@ -168,7 +166,10 @@ export class Scheduler {
 
   /** A maintenance command got no usable answer (none after its retry, or not the expected kind). */
   onCommandFailed(c: QueuedCommand): void {
-    if (this.running && c.key === 'boosts') this.armBuffs(this.buffGraceMs()) // fallback without endsAt
+    if (!this.running || c.key !== 'boosts') return
+    // no usable /boosts reply: start of session → buy after the grace; after the buys → wait the buff length
+    if (this.buffPhase === 'checking') this.armBuffCycle(this.buffGraceMs())
+    else if (this.buffPhase === 'buying') this.waitBuffs(null)
   }
 
   /**
@@ -176,6 +177,12 @@ export class Scheduler {
    * flight without a reply yet, is requested again 5–30 s after the scheduler thaws (the timers are frozen until then).
    */
   onQueueCleared(): void {
+    // a buff cycle cut by a captcha restarts with a fresh /boosts check (never buys twice blindly)
+    if (this.buffPhase === 'checking' || this.buffPhase === 'buying') {
+      for (const key of ['buff-fish', 'buff-treasure', 'boosts']) this.pending.delete(key)
+      this.buffPhase = 'off'
+      this.armBuffCycle(this.buffGraceMs())
+    }
     for (const [key, cmd] of this.pending) {
       this.set(`redo-${key}`, this.buffGraceMs(), () => {
         const what = key === 'bait' ? 'bait' : key.startsWith('buff-') ? 'buff' : null
@@ -316,30 +323,61 @@ export class Scheduler {
     return randomBetweenMs(5, 30, this.rand)
   }
 
-  private armBuffs(ms: number): void {
-    this.armBuff('fish', ms)
-    this.armBuff('treasure', ms)
+  /** (Re)arms the next step of the buff cycle in `ms`: a /boosts check when available, else the buys. */
+  private armBuffCycle(ms: number): void {
+    this.set('buff-cycle', ms, () => this.buffCycleTick())
   }
 
-  private armBuff(type: 'fish' | 'treasure', ms: number): void {
-    this.set(`buff-${type}`, ms, () => this.buffTick(type))
-  }
-
-  private buffTick(type: 'fish' | 'treasure'): void {
+  private buffCycleTick(): void {
     const cfg = this.getConfig()
-    const blockedFor = this.buyBlockedUntil.buff - Date.now()
+    if (!cfg.buffs.enabled || !this.has('buy')) {
+      this.buffPhase = 'off'
+      return this.armBuffCycle(POLL_MS) // picks up buffs enabled mid-session
+    }
+    if (this.buffPhase === 'off' && this.has('boosts')) {
+      this.buffPhase = 'checking' // first check what is active (e.g. buffs just enabled, or after a captcha)
+      return this.pushBoosts()
+    }
+    this.buyBuffs()
+  }
+
+  /** Fish then treasure buff, then /boosts: pushed back to back so nothing runs in between. */
+  private buyBuffs(): void {
+    const cfg = this.getConfig()
     const buy = this.info('buy')
-    if (!cfg.buffs.enabled || !buy) return this.armBuff(type, POLL_MS)
-    if (blockedFor > 0) return this.armBuff(type, blockedFor)
-    this.push({
-      name: 'buy',
-      options: positionalOptions(buy, [`${type}${cfg.buffs.lengthMin}m`, 1]),
-      priority: 'maintenance',
-      key: `buff-${type}`
-    })
-    if (type === 'fish') this.pushBait()
-    // fallback if the purchase reply is not recognised; a 'purchase' event re-arms it
-    this.armBuff(type, cfg.buffs.lengthMin * MIN + this.buffGraceMs())
+    if (!cfg.buffs.enabled || !buy) return this.armBuffCycle(POLL_MS)
+    const blockedFor = this.buyBlockedUntil.buff - Date.now()
+    if (blockedFor > 0) return this.armBuffCycle(blockedFor)
+    for (const type of ['fish', 'treasure'] as const) {
+      this.push({
+        name: 'buy',
+        options: positionalOptions(buy, [`${type}${cfg.buffs.lengthMin}m`, 1]),
+        priority: 'maintenance',
+        key: `buff-${type}`
+      })
+    }
+    this.buffBoughtAt = Date.now()
+    this.buffPhase = 'buying'
+    if (this.has('boosts')) this.pushBoosts()
+    else this.waitBuffs(null)
+  }
+
+  /** /boosts reply seen by the buff cycle (start check, post-buy check, or any refresh while waiting). */
+  private onBuffBoosts(active: Boost[]): void {
+    const ends = active.filter((b) => buffType(b.name)).map((b) => b.endsAt)
+    const lastEnd = ends.length ? Math.max(...ends) : null
+    if (this.buffPhase === 'checking') {
+      if (lastEnd === null) this.armBuffCycle(this.buffGraceMs())
+      else this.waitBuffs(lastEnd)
+    } else if (this.buffPhase === 'buying') this.waitBuffs(lastEnd)
+    else if (this.buffPhase === 'waiting' && lastEnd !== null) this.waitBuffs(lastEnd) // more precise end
+  }
+
+  /** Waits until both buffs are over (`lastEnd`, or the buff length after the purchase), then buys again. */
+  private waitBuffs(lastEnd: number | null): void {
+    const end = lastEnd ?? this.buffBoughtAt + this.getConfig().buffs.lengthMin * MIN
+    this.buffPhase = 'waiting'
+    this.set('buff-cycle', Math.max(0, end - Date.now()) + this.buffGraceMs(), () => this.buyBuffs())
   }
 
   private maybeBait(unknownIsLow: boolean): void {
