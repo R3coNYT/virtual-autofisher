@@ -1,5 +1,30 @@
+# dependencies & build output
 node_modules
 out
 dist
-*.log
 *.tsbuildinfo
+
+# logs
+*.log
+
+# local tool/agent workspaces
+.superpowers/
+.impeccable/
+.claude/settings.local.json
+
+# secrets & local env
+.env
+.env.*
+
+# app data that must never be committed (normally lives in %APPDATA%\virtual-autofisher)
+captures/
+captures.zip
+sessions/
+config.json
+config.bak.json
+state.json
+
+# OS / editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
