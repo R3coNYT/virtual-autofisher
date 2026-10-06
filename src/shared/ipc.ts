@@ -2,6 +2,7 @@ import type {
   ChannelInfo,
   Config,
   DeepPartial,
+  EngineInfo,
   EngineState,
   GameSnapshot,
   GuildInfo,
@@ -12,7 +13,7 @@ import type {
 
 /** Événements main → renderer : nom du canal → type de la charge utile. */
 export type EventMap = {
-  'engine.state': { state: EngineState; info?: { reason?: string; captchaImageUrl?: string; captchaText?: string } }
+  'engine.state': { state: EngineState; info?: EngineInfo }
   'engine.commands': SlashCommandInfo[]
   /**
    * `patch` is a partial snapshot. The renderer must REPLACE (not deep-merge) the nested section
@@ -22,10 +23,22 @@ export type EventMap = {
   'game.patch': DeepPartial<GameSnapshot>
   /** Log entries appended since the last event (single path for the log). */
   'log.append': LogEntry[]
-  'captcha.show': { imageUrl?: string; text: string }
+  /** `solved`: the answer was accepted, the panel shows a success state until captcha.hide. */
+  'captcha.show': CaptchaPayload
   'captcha.hide': undefined
   'connection.status': { status: ConnectionStatus; message?: string }
   toast: { level: 'info' | 'success' | 'error'; message: string }
+}
+
+export type CaptchaPayload = { imageUrl?: string; text: string; solved?: boolean }
+
+/** Everything the renderer needs to rebuild its state after a reload. */
+export type EngineStatus = {
+  state: EngineState
+  info: EngineInfo
+  /** Non-null while the engine is in captcha. */
+  captcha: CaptchaPayload | null
+  snapshot: GameSnapshot
 }
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'invalidToken'
@@ -58,6 +71,8 @@ export type Api = {
     resume(): Promise<void>
     stop(): Promise<void>
     commands(): Promise<SlashCommandInfo[]>
+    /** Current state, captcha and game snapshot (renderer reload). */
+    status(): Promise<EngineStatus>
   }
   command: { send(name: string, options?: Record<string, string | number>): Promise<void> }
   captcha: {

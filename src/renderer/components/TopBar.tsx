@@ -30,6 +30,26 @@ function Control(props: { label: string; icon: ReactNode; run: () => Promise<voi
   )
 }
 
+const PAUSE_REASONS: Record<string, string> = {
+  user: 'Mise en pause par vous',
+  network: 'Connexion à Discord perdue',
+  noResponse: 'Virtual Fisher ne répond pas',
+  exception: 'Erreur inattendue'
+}
+
+/** Why the engine is paused, in error, or stopped on its own (session limit). */
+function StateReason(): JSX.Element | null {
+  const state = useStore((s) => s.engineState)
+  const reason = useStore((s) => s.engineInfo.reason)
+  if (!reason || (state !== 'paused' && state !== 'error' && state !== 'idle')) return null
+  const text = state === 'paused' ? (PAUSE_REASONS[reason] ?? reason) : reason
+  return (
+    <span className={`max-w-[22rem] truncate text-xs ${state === 'error' ? 'text-red-300' : 'text-slate-400'}`} title={text}>
+      {text}
+    </span>
+  )
+}
+
 function SessionClock(): JSX.Element | null {
   const startedAt = useStore((s) => s.game.session.startedAt)
   const now = useNow()
@@ -64,6 +84,7 @@ export const TopBar = memo(function TopBar(): JSX.Element {
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
       </button>
       <StatusPill state={state} />
+      <StateReason />
       <SessionClock />
       <div className="ml-auto flex items-center gap-2">
         {state === 'connecting' && (

@@ -1,6 +1,7 @@
 import { Background } from './components/Background'
 import { CaptchaPanel } from './components/CaptchaPanel'
 import { Splash } from './components/Splash'
+import { Toasts } from './components/Toasts'
 import Dashboard from './screens/Dashboard'
 import Onboarding from './screens/Onboarding'
 import ServerPicker from './screens/ServerPicker'
@@ -40,6 +41,7 @@ export default function App(): JSX.Element {
         <Screen />
       </div>
       <CaptchaPanel />
+      <Toasts />
     </>
   )
 }

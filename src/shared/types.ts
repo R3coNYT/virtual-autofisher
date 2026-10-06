@@ -9,6 +9,15 @@ export type RareCounts = { gold: number; emerald: number; lava: number; diamond:
 
 export type EngineState = 'idle' | 'connecting' | 'running' | 'paused' | 'resting' | 'captcha' | 'error'
 export type PauseReason = 'user' | 'network' | 'noResponse' | 'exception'
+/** Detail sent with each engine state: pause/error/stop reason, captcha content. */
+export type EngineInfo = {
+  /** paused: a PauseReason code; error / idle (session limit): a French message. */
+  reason?: string
+  captchaImageUrl?: string
+  captchaText?: string
+  /** captcha: the bot accepted the answer, the engine resumes in a few seconds. */
+  captchaSolved?: boolean
+}
 
 export type SelfUser = { id: string; username: string; avatarUrl: string }
 export type GuildInfo = { id: string; name: string; iconUrl: string | null; hasVirtualFisher: boolean }

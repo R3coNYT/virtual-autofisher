@@ -314,4 +314,93 @@ describe('registerHandlers', () => {
     await call('app.openDataDir')
     expect(openPath).toHaveBeenCalledWith(dir)
   })
+
+  it('toasts: no response, exception, error and session limit (spec §7)', async () => {
+    const toasts = (sent: { channel: string; payload: unknown }[]) =>
+      sent.filter((s) => s.channel === 'toast').map((s) => s.payload as { level: string; message: string })
+
+    const a = setup()
+    a.config.update({ target: T })
+    await a.call('engine.start')
+    await vi.advanceTimersByTimeAsync(60_000) // nothing answers: 3 timeouts → paused (noResponse)
+    expect(a.engine.state).toBe('paused')
+    expect(toasts(a.sent)).toEqual([{ level: 'error', message: 'Virtual Fisher ne répond pas — pêche en pause' }])
+    a.config.update({ sessionLimitH: 1 })
+    await vi.advanceTimersByTimeAsync(3_600_000)
+    expect(a.engine.state).toBe('idle')
+    expect(toasts(a.sent).at(-1)).toEqual({ level: 'info', message: 'Limite de session atteinte — pêche arrêtée' })
+
+    const b = setup()
+    b.config.update({ target: T })
+    await b.call('engine.start')
+    vi.spyOn(b.state, 'apply').mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    b.client.emitBot(fixture('catch-basic'))
+    expect(b.engine.state).toBe('paused')
+    expect(toasts(b.sent)).toEqual([{ level: 'error', message: 'Erreur inattendue — pêche en pause' }])
+    await b.call('engine.resume')
+    b.client.emitDisconnect()
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(b.engine.state).toBe('error')
+    expect(toasts(b.sent).at(-1)).toEqual({ level: 'error', message: 'Erreur : Connexion à Discord perdue depuis plus de 2 minutes' })
+
+    // a user pause or a plain stop is not toasted
+    const c = setup()
+    c.config.update({ target: T })
+    await c.call('engine.start')
+    await c.call('engine.pause')
+    await c.call('engine.stop')
+    expect(toasts(c.sent)).toEqual([])
+  })
+
+  it('engine.status rebuilds the renderer state (captcha included) after a reload', async () => {
+    const { call, config, client } = setup()
+    expect(await call('engine.status')).toMatchObject({ state: 'idle', captcha: null, snapshot: { session: { catches: 0 } } })
+    config.update({ target: T })
+    await call('engine.start')
+    client.emitBot(fixture('catch-basic'))
+    await call('engine.pause')
+    expect(await call('engine.status')).toMatchObject({ state: 'paused', info: { reason: 'user' }, captcha: null })
+    client.emitBot(fixture('captcha-image'))
+    const st = await call<{ state: string; captcha: unknown; snapshot: { session: { catches: number; captchas: number }; log: unknown[] } }>(
+      'engine.status'
+    )
+    expect(st.state).toBe('captcha')
+    expect(st.captcha).toEqual({ imageUrl: 'https://cdn.example.test/captcha/abc123.png', text: expect.stringMatching(/captcha/i) })
+    expect(st.snapshot.session).toMatchObject({ catches: 3, captchas: 1 })
+    expect(st.snapshot.log.length).toBeGreaterThan(0)
+    expect(JSON.stringify(st)).not.toContain(TOKEN)
+  })
+
+  it('captcha solved → captcha.show with solved: true, then captcha.hide', async () => {
+    const { call, config, client, sent } = setup()
+    config.update({ target: T })
+    await call('engine.start')
+    client.emitBot(fixture('captcha-image'))
+    client.emitBot(fixture('captcha-solved'))
+    const shows = sent.filter((s) => s.channel === 'captcha.show').map((s) => s.payload)
+    expect(shows.at(-1)).toEqual({
+      imageUrl: 'https://cdn.example.test/captcha/abc123.png',
+      text: 'Captcha résolu — reprise dans quelques secondes…',
+      solved: true
+    })
+    expect(await call('engine.status')).toMatchObject({ captcha: { solved: true } })
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(sent.map((s) => s.channel)).toContain('captcha.hide')
+  })
+
+  it('engine.stop during a captcha → idle, captcha.hide, nothing sent', async () => {
+    const { call, config, client, engine, sent } = setup()
+    config.update({ target: T })
+    await call('engine.start')
+    client.emitBot(fixture('captcha-image'))
+    const before = client.sent.length
+    await call('engine.stop')
+    expect(engine.state).toBe('idle')
+    expect(sent.filter((s) => s.channel === 'captcha.hide')).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(client.sent).toHaveLength(before)
+    expect(client.sent.map((s) => s.command)).not.toContain('verify')
+  })
 })

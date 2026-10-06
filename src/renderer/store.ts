@@ -2,14 +2,14 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { ConnectionStatus } from '../shared/ipc'
 import { DEFAULT_CONFIG } from '../shared/types'
-import type { Config, DeepPartial, EngineState, GameSnapshot, LogEntry, SelfUser, SlashCommandInfo } from '../shared/types'
+import type { Config, DeepPartial, EngineInfo, EngineState, GameSnapshot, LogEntry, SelfUser, SlashCommandInfo } from '../shared/types'
 import { applyGamePatch, emptySnapshot } from './applyGamePatch'
 import { appendCapped } from './logBuffer'
 import { resolveFirstScreen } from './resolveFirstScreen'
 
 export type Screen = 'splash' | 'onboarding' | 'picker' | 'dashboard' | 'settings'
 export type Target = { guildId: string; channelId: string }
-export type CaptchaState = { imageUrl?: string; text?: string } | null
+export type CaptchaState = { imageUrl?: string; text?: string; solved?: boolean } | null
 /** Human names of the chosen server/channel, kept alongside the ids (display only). */
 export type TargetNames = { guildId: string; channelId: string; guildName: string; channelName: string }
 export type Toast = { id: number; level: 'info' | 'success' | 'error'; message: string }
@@ -28,6 +28,8 @@ type State = {
   /** true while the user is going through the onboarding login flow (confirmation card). */
   loggingIn: boolean
   engineState: EngineState
+  /** Detail of the engine state (pause/error/stop reason). */
+  engineInfo: EngineInfo
   game: GameSnapshot
   log: LogEntry[]
   captcha: CaptchaState
@@ -70,6 +72,7 @@ export const useStore = create<State & Actions>((set) => ({
   authError: null,
   loggingIn: false,
   engineState: 'idle',
+  engineInfo: {},
   game: emptySnapshot(),
   log: [],
   captcha: null,
@@ -130,13 +133,17 @@ export function useApiEvents(): void {
       api.on('engine.state', ({ state, info }) => {
         st.setState((s) => ({
           engineState: state,
-          captcha: state === 'captcha' ? { imageUrl: info?.captchaImageUrl, text: info?.captchaText } : s.captcha
+          engineInfo: info ?? {},
+          captcha:
+            state === 'captcha'
+              ? { imageUrl: info?.captchaImageUrl, text: info?.captchaText, solved: info?.captchaSolved }
+              : s.captcha
         }))
       }),
       api.on('engine.commands', (commands) => st.setState({ commands })),
       api.on('game.patch', (p) => st.getState().applyPatch(p)),
       api.on('log.append', (e) => st.getState().appendLog(e)),
-      api.on('captcha.show', (c) => st.setState({ captcha: { imageUrl: c.imageUrl, text: c.text } })),
+      api.on('captcha.show', (c) => st.setState({ captcha: { imageUrl: c.imageUrl, text: c.text, solved: c.solved } })),
       api.on('captcha.hide', () => st.setState({ captcha: null })),
       api.on('toast', (t) => st.getState().pushToast(t)),
       api.on('connection.status', ({ status }) => {
@@ -150,6 +157,20 @@ export function useApiEvents(): void {
     api.config
       .get()
       .then((config) => !cancelled && st.setState({ config }))
+      .catch(() => undefined)
+    // after a renderer reload: state, open captcha and stats come back from main
+    api.engine
+      .status()
+      .then((status) => {
+        if (cancelled) return
+        st.setState({
+          engineState: status.state,
+          engineInfo: status.info,
+          captcha: status.captcha ? { ...status.captcha } : null,
+          game: status.snapshot,
+          log: appendCapped([], status.snapshot.log)
+        })
+      })
       .catch(() => undefined)
     api.engine
       .commands()

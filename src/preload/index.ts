@@ -17,7 +17,8 @@ const api: Api = {
     pause: () => invoke('engine.pause'),
     resume: () => invoke('engine.resume'),
     stop: () => invoke('engine.stop'),
-    commands: () => invoke('engine.commands')
+    commands: () => invoke('engine.commands'),
+    status: () => invoke('engine.status')
   },
   command: { send: (name, options) => invoke('command.send', name, options) },
   captcha: {
