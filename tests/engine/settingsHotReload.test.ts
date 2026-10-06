@@ -16,6 +16,7 @@ function setup(patch: (c: Config) => void = () => {}) {
   cfg.fishing.jitterSec = 0
   patch(cfg)
   const client = new FakeDiscordClient()
+  client.commands = client.commands.filter((c) => c.name !== 'boosts') // sent at start: keep /fish first
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
   const engine = new Engine({ client, config: { get: () => structuredClone(cfg) }, state: new GameState(), rand: () => 0.5, logger })
   return { cfg, client, engine, names: () => client.sent.map((x) => x.command) }

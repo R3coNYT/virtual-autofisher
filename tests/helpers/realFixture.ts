@@ -21,8 +21,20 @@ type RealCapture = {
  * toBotMessage exactly like a live message: Components V2 payload, our interaction metadata.
  */
 export function loadReal(name: string, selfId = REAL_SELF_ID): BotMessage {
+  return loadCapture('real', name, selfId)
+}
+
+/**
+ * Components V2 messages rebuilt from screenshots (tests/fixtures/messages/v2), same shape as
+ * the real captures: used where the exact payload was not captured (e.g. /boosts, /boosters).
+ */
+export function loadV2(name: string, selfId = REAL_SELF_ID): BotMessage {
+  return loadCapture('v2', name, selfId)
+}
+
+function loadCapture(dir: 'real' | 'v2', name: string, selfId: string): BotMessage {
   const raw = JSON.parse(
-    readFileSync(resolve(__dirname, '../fixtures/messages/real', `${name}.json`), 'utf8')
+    readFileSync(resolve(__dirname, '../fixtures/messages', dir, `${name}.json`), 'utf8')
   ) as RealCapture
   const lib: LibMessageLike = {
     id: raw.id,
@@ -45,4 +57,11 @@ export function loadReal(name: string, selfId = REAL_SELF_ID): BotMessage {
 export function realForEngine(name: string): Partial<BotMessage> {
   const { channelId: _drop, ...rest } = loadReal(name)
   return { ...rest, interactionUserId: 'me' }
+}
+
+/** V2 fixture for the engine; a fresh id each call so repeated replies are not taken for edits. */
+let v2Seq = 0
+export function v2ForEngine(name: string): Partial<BotMessage> {
+  const { channelId: _drop, ...rest } = loadV2(name)
+  return { ...rest, id: `${rest.id}-${++v2Seq}`, interactionUserId: 'me' }
 }

@@ -18,6 +18,7 @@ export function BoostChips({ boosts }: { boosts: GameSnapshot['boosts'] }): JSX.
           <Zap className="h-3 w-3" aria-hidden />
           <span className="font-medium">{b.name}</span>
           <span className="text-slate-300">{formatDuration(b.endsAt - now)}</span>
+          {b.by && <span className="text-slate-400">by {b.by}</span>}
         </span>
       ))}
     </section>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseMessage } from '../../src/main/parser'
-import { loadReal } from '../helpers/realFixture'
+import { loadReal, loadV2 } from '../helpers/realFixture'
 
 const NOW = 1_700_000_000_000
 const parse = (name: string) => parseMessage(loadReal(name), NOW)
@@ -114,5 +114,38 @@ describe('real Virtual Fisher captures (Components V2)', () => {
     expect(bm.isEdit).toBe(true)
     expect(bm.embeds[0].title).toBe('Other Player')
     expect(parseMessage(bm, NOW).kind).not.toBe('catch')
+  })
+})
+
+describe('Components V2 boosts / boosters (rebuilt from screenshots)', () => {
+  const v2 = (name: string) => parseMessage(loadV2(name), NOW)
+
+  it('/boosts: Personal and Global boosts with the global booster', () => {
+    expect(v2('boosts-active')).toEqual({
+      kind: 'boosts',
+      active: [
+        { name: 'Personal', endsAt: NOW + (9 * 60 + 43) * 1000 },
+        { name: 'Global', endsAt: NOW + ((3 * 60 + 24) * 60 + 35) * 1000, by: 'Messor' }
+      ]
+    })
+  })
+
+  it('/boosts: global only → no Personal entry', () => {
+    expect(v2('boosts-global-only')).toEqual({
+      kind: 'boosts',
+      active: [{ name: 'Global', endsAt: NOW + ((3 * 60 + 24) * 60 + 35) * 1000, by: 'Messor' }]
+    })
+  })
+
+  it('/boosts: empty body → no active boost', () => {
+    expect(v2('boosts-none')).toEqual({ kind: 'boosts', active: [] })
+  })
+
+  it('/boosters: "Personal Boosters: 1."', () => {
+    expect(v2('boosters-one')).toEqual({ kind: 'boosters', personal: 1 })
+  })
+
+  it('/boosters: "You have no boosters!" → 0', () => {
+    expect(v2('boosters-none')).toEqual({ kind: 'boosters', personal: 0 })
   })
 })

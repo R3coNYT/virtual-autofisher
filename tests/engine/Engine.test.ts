@@ -36,6 +36,8 @@ function setup(patch: (c: Config) => void = () => {}) {
   cfg.profile.refreshMin = 0
   patch(cfg)
   const client = new FakeDiscordClient()
+  // /boosts is sent at every start: tests that are not about buffs drop it so /fish stays first
+  if (!cfg.buffs.enabled) client.commands = client.commands.filter((c) => c.name !== 'boosts')
   const state = new GameState()
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
   const engine = new Engine({ client, config: { get: () => structuredClone(cfg) }, state, rand: () => 0.5, logger })
@@ -357,10 +359,8 @@ describe('Engine', () => {
     const { client, engine, names } = setup((c) => {
       c.buffs = { enabled: true, lengthMin: 5 }
     })
-    await engine.start(A) // fish sent; boosts queued; buff timers at 17.5 s
-    client.emitBot(oneFish)
-    await tick(2500) // boosts sent
-    expect(names()).toEqual(['fish', 'boosts'])
+    await engine.start(A) // /boosts first (fish queued); buff timers armed from its reply
+    expect(names()).toEqual(['boosts'])
     client.emitBot({ embeds: [{ title: 'Active boosts', description: 'None', fields: [] }] })
     await tick(0)
     // no boost active → buy both buffs
@@ -399,9 +399,7 @@ describe('Engine', () => {
     })
     await engine.start(A)
     const buys = (item: string) => client.sent.filter((s) => s.command === 'buy' && s.options?.item === item)
-    client.emitBot(oneFish)
-    await tick(2500)
-    expect(client.sent.at(-1)?.command).toBe('boosts')
+    expect(client.sent.at(-1)?.command).toBe('boosts') // sent first at start
     client.emitBot(boostsMsg('Fish Boost: 10m'))
     await run(client, 10 * 60_000 - 1000, (cmd) => (cmd === 'boosts' ? null : oneFish))
     expect(buys('fish5m')).toHaveLength(0)
@@ -414,9 +412,7 @@ describe('Engine', () => {
     const { client, engine } = setup((c) => {
       c.buffs = { enabled: true, lengthMin: 5 }
     })
-    await engine.start(A)
-    client.emitBot(oneFish)
-    await tick(2500)
+    await engine.start(A) // /boosts sent first
     client.emitBot(boostsMsg('None'))
     await run(client, 4_500)
     expect(client.sent.some((s) => s.command === 'buy')).toBe(false)
@@ -444,7 +440,6 @@ describe('Engine', () => {
       c.buffs = { enabled: true, lengthMin: 5 }
     })
     await engine.start(A)
-    client.emitBot(oneFish)
     await run(client, 60_000, (cmd) => (cmd === 'boosts' ? null : oneFish))
     expect(client.sent.filter((s) => s.command === 'boosts')).toHaveLength(2)
     expect(client.sent.filter((s) => s.command === 'buy')).toHaveLength(2)
@@ -455,8 +450,6 @@ describe('Engine', () => {
       c.buffs = { enabled: true, lengthMin: 5 }
     })
     await engine.start(A)
-    client.emitBot(oneFish)
-    await tick(2500)
     expect(client.sent.at(-1)?.command).toBe('boosts')
     client.emitBot({ content: 'Something the parser does not know' })
     await run(client, 4_500)
@@ -470,8 +463,6 @@ describe('Engine', () => {
       c.buffs = { enabled: true, lengthMin: 5 }
     })
     await engine.start(A)
-    client.emitBot(oneFish)
-    await tick(2500)
     expect(client.sent.at(-1)?.command).toBe('boosts')
     client.emitBot(CAPTCHA) // the reply to /boosts is the captcha
     const n = client.sent.length
@@ -480,7 +471,7 @@ describe('Engine', () => {
     client.emitBot(SOLVED)
     await tick(10_000)
     expect(engine.state).toBe('running')
-    await run(client, 40_000, (cmd) => (cmd === 'boosts' ? boostsMsg('None') : oneFish))
+    await run(client, 60_000, (cmd) => (cmd === 'boosts' ? boostsMsg('None') : oneFish))
     expect(client.sent.slice(n).filter((s) => s.command === 'boosts')).toHaveLength(1)
     expect(client.sent.filter((s) => s.command === 'buy')).toHaveLength(2)
   })
@@ -489,16 +480,14 @@ describe('Engine', () => {
     const { client, engine } = setup((c) => {
       c.buffs = { enabled: true, lengthMin: 5 }
     })
-    await engine.start(A)
-    client.emitBot(oneFish)
-    await tick(2500)
+    await engine.start(A) // /boosts in flight
     client.emitBot({ ...CAPTCHA, isEdit: true })
     const n = client.sent.length
     await tick(5 * 60_000) // the in-flight /boosts times out during the captcha
     expect(client.sent).toHaveLength(n)
     client.emitBot(SOLVED)
     await tick(10_000)
-    await run(client, 40_000, (cmd) => (cmd === 'boosts' ? boostsMsg('None') : oneFish))
+    await run(client, 60_000, (cmd) => (cmd === 'boosts' ? boostsMsg('None') : oneFish))
     expect(client.sent.slice(n).filter((s) => s.command === 'boosts')).toHaveLength(1)
     expect(client.sent.filter((s) => s.command === 'buy')).toHaveLength(2)
   })
@@ -508,9 +497,7 @@ describe('Engine', () => {
       c.daily.enabled = true
     })
     await engine.start(A)
-    client.emitBot(oneFish)
-    await tick(2500)
-    expect(client.sent.at(-1)?.command).toBe('daily')
+    expect(client.sent.at(-1)?.command).toBe('daily') // data first, fish queued
     client.emitRateLimited(30_000) // keeps the retry copy waiting in the queue
     await tick(8_500) // daily times out → retry copy queued, held by the rate limit
     const dailies = () => client.sent.filter((s) => s.command === 'daily').length
@@ -534,20 +521,20 @@ describe('Engine', () => {
     expect(client.sent.filter((s) => s.command === 'daily')).toHaveLength(2)
   })
 
-  it('a daily dropped by a captcha is sent again after the resume', async () => {
+  it('a daily answered by a captcha is sent again after the resume', async () => {
     const { client, engine } = setup((c) => {
       c.daily.enabled = true
     })
-    await engine.start(A) // fish in flight, daily queued
-    expect(client.sent.map((s) => s.command)).toEqual(['fish'])
-    client.emitBot(CAPTCHA) // answers the fish, queue cleared (daily dropped)
+    await engine.start(A) // daily in flight, fish queued
+    expect(client.sent.map((s) => s.command)).toEqual(['daily'])
+    client.emitBot(CAPTCHA) // answers the daily, queue cleared (fish dropped)
     await tick(60_000)
-    expect(client.sent.map((s) => s.command)).toEqual(['fish'])
+    expect(client.sent.map((s) => s.command)).toEqual(['daily'])
     client.emitBot(SOLVED)
     await tick(10_000) // resume
     expect(engine.state).toBe('running')
     await run(client, 40_000)
-    expect(client.sent.filter((s) => s.command === 'daily')).toHaveLength(1)
+    expect(client.sent.filter((s) => s.command === 'daily')).toHaveLength(2)
   })
 
   it('start(B) during a captcha is refused and keeps the captcha', async () => {
@@ -657,7 +644,7 @@ describe('Engine: cooldown replies', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('/daily on cooldown'))
 
     cfg.fishing.baseCooldownSec = 600 // fewer fish over the next 20 h
-    const rearmAt = 2_500 + (20 * 60 + 12) * 60_000 + 180_000 // daily sent at 2.5 s; + wait + 3 min (rand 0.5 of 1–5)
+    const rearmAt = (20 * 60 + 12) * 60_000 + 180_000 // daily sent first at 0 s; + wait + 3 min (rand 0.5 of 1–5)
     await tick(rearmAt - 60_000 - 30_000)
     expect(dailies()).toBe(1)
     await tick(60_000)
@@ -988,12 +975,12 @@ describe('Engine: real captures', () => {
     autoReply(client, (cmd) => (cmd === 'daily' ? realForEngine('daily-cooldown') : oneFish))
     const t0 = Date.now()
     await engine.start(A)
-    await tick(5_000)
+    await tick(10_000)
     expect(names().filter((n) => n === 'daily')).toHaveLength(1)
     const wait = ((10 * 60 + 20) * 60 + 25) * 1000
     const next = state.snapshot().nextDailyAt!
     expect(next).toBeGreaterThanOrEqual(t0 + wait)
-    expect(next).toBeLessThanOrEqual(t0 + 5_000 + wait)
+    expect(next).toBeLessThanOrEqual(t0 + 10_000 + wait)
     expect(engine.state).toBe('running')
     expect(names().filter((n) => n === 'fish').length).toBeGreaterThanOrEqual(2)
   })

@@ -152,7 +152,7 @@ describe('registerHandlers', () => {
     expect(engine.state).toBe('stopping')
     await vi.advanceTimersByTimeAsync(25_000)
     expect(engine.state).toBe('idle')
-    expect(client.sent.map((s) => s.command)).toEqual(['fish', 'profile', 'quests'])
+    expect(client.sent.map((s) => s.command)).toEqual(['profile', 'profile', 'quests']) // start sends /profile first (data before /fish)
 
     await call('engine.start')
     await call('engine.stop', false)

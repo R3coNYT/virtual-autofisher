@@ -1,4 +1,4 @@
-import { CalendarClock, Fish, Map, Package } from 'lucide-react'
+import { CalendarClock, Fish, Map, Package, Rocket } from 'lucide-react'
 import { memo } from 'react'
 import type { ReactNode } from 'react'
 import type { GameSnapshot } from '../../shared/types'
@@ -34,6 +34,9 @@ export const SidePanel = memo(function SidePanel({ account, quests, nextDailyAt 
           value={account.bait ? `${account.bait.name} ×${account.bait.count}` : '—'}
         />
         <Row icon={<CalendarClock className="h-4 w-4" />} label="Next daily" value={daily} />
+        {account.personalBoosters != null && (
+          <Row icon={<Rocket className="h-4 w-4" />} label="Personal boosters" value={String(account.personalBoosters)} />
+        )}
       </div>
       <div>
         <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Daily quests</h3>

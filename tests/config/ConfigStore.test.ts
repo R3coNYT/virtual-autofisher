@@ -28,6 +28,14 @@ describe('ConfigStore', () => {
     expect(onDisk.sell.enabled).toBe(true)
     expect(new ConfigStore(dir, fakeCipher()).load().sell.every).toBe(10)
   })
+  it('an older config.json without boosters gets the default boosters section', () => {
+    const dir = tmp()
+    const { boosters: _drop, ...old } = DEFAULT_CONFIG
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ ...old, sell: { ...old.sell, every: 7 } }))
+    const c = new ConfigStore(dir, fakeCipher()).load()
+    expect(c.boosters).toEqual({ autoPersonal: false })
+    expect(c.sell.every).toBe(7)
+  })
   it('update remplace target en bloc', () => {
     const s = new ConfigStore(tmp(), fakeCipher())
     s.load()

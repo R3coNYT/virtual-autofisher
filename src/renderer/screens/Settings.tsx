@@ -272,7 +272,7 @@ export default function Settings(): JSX.Element {
       .catch(() => undefined)
   }, [])
 
-  const { fishing, sell, buffs, bait, profile, daily, quests, breaks, notifications } = cfg
+  const { fishing, sell, buffs, boosters, bait, profile, daily, quests, breaks, notifications } = cfg
 
   return (
     <Background>
@@ -331,6 +331,13 @@ export default function Settings(): JSX.Element {
               ]}
               onChange={(v) => void save({ buffs: { lengthMin: v } })}
             />
+          </Row>
+          <Row
+            label="Auto-activate a personal booster"
+            help="When no personal boost is active and /boosters shows one, it is used (/use Personal). At most once per expiry."
+            missing={missing('boosters') || missing('use')}
+          >
+            <Toggle label="Auto-activate a personal booster" checked={boosters.autoPersonal} onChange={(v) => void save({ boosters: { autoPersonal: v } })} />
           </Row>
           <Row label="Auto buy bait" missing={missing('buy')}>
             <Toggle label="Auto buy bait" checked={bait.enabled} onChange={(v) => void save({ bait: { enabled: v } })} />

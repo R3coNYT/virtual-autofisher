@@ -30,6 +30,9 @@ describe('clampConfigPatch', () => {
     })
     expect(clampConfigPatch({ fishing: { baseCooldownSec: NaN } })).toEqual({})
   })
+  it('passes boosters.autoPersonal through', () => {
+    expect(clampConfigPatch({ boosters: { autoPersonal: true } })).toEqual({ boosters: { autoPersonal: true } })
+  })
   it('keeps bait.amount a non-negative integer', () => {
     expect(clampConfigPatch({ bait: { amount: -4 } })).toEqual({ bait: { amount: 0 } })
     expect(clampConfigPatch({ bait: { amount: 12.6 } })).toEqual({ bait: { amount: 13 } })

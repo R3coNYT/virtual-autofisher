@@ -1,6 +1,7 @@
 import { memo, useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Send } from 'lucide-react'
+import { boosterUseOptions } from '../../shared/boosters'
 import type { EngineState, SlashCommandInfo } from '../../shared/types'
 import { coinflipOptionNames, parseCommandLine, sellAllOptions } from '../format'
 import { useStore } from '../store'
@@ -9,12 +10,21 @@ import { cardCls } from './StatCard'
 
 const ACTIVE: EngineState[] = ['running', 'paused', 'resting']
 
-type Quick = { label: string; name: string; options?: (cmd: SlashCommandInfo) => Record<string, string | number> }
+/** `options` returning null: the command exists but lacks the needed choice (button disabled). */
+type Quick = {
+  label: string
+  name: string
+  options?: (cmd: SlashCommandInfo) => Record<string, string | number> | null
+  missingChoice?: string
+}
 const QUICK: Quick[] = [
   { label: '/sell all', name: 'sell', options: sellAllOptions },
   { label: '/daily', name: 'daily' },
   { label: '/quests', name: 'quests' },
   { label: '/boosts', name: 'boosts' },
+  { label: '/boosters', name: 'boosters' },
+  { label: '/use Personal', name: 'use', options: (c) => boosterUseOptions(c, 'personal'), missingChoice: 'Personal' },
+  { label: '/use Global', name: 'use', options: (c) => boosterUseOptions(c, 'global'), missingChoice: 'Global' },
   { label: '/profile', name: 'profile' },
   { label: '/top', name: 'top' }
 ]
@@ -61,15 +71,17 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
     <section className={`${cardCls} flex flex-wrap items-center gap-2 p-3`} aria-label="Quick commands">
       {QUICK.map((q) => {
         const cmd = find(q.name)
-        const reason = reasonFor(q.name)
+        const options = cmd && q.options ? q.options(cmd) : undefined
+        const reason =
+          reasonFor(q.name) ?? (options === null ? `/${q.name} has no "${q.missingChoice}" choice on this server` : undefined)
         return (
           <button
-            key={q.name}
+            key={q.label}
             type="button"
             className={btn}
             disabled={!!reason}
             title={reason ?? `Send ${q.label}`}
-            onClick={() => cmd && send(q.name, q.options?.(cmd))}
+            onClick={() => cmd && options !== null && send(q.name, options)}
           >
             {q.label}
           </button>

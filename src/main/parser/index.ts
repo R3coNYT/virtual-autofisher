@@ -7,6 +7,7 @@ import { sellRule } from './rules/sell'
 import { inventoryRule } from './rules/inventory'
 import { statsRule } from './rules/stats'
 import { makeBoostsRule } from './rules/boosts'
+import { boostersRule } from './rules/boosters'
 import { purchaseRule } from './rules/purchase'
 import { dailyRule } from './rules/daily'
 import { questsRule } from './rules/quests'
@@ -32,6 +33,7 @@ export function parseMessage(m: BotMessage, now: number = Date.now()): GameEvent
     sellRule,
     inventoryRule,
     statsRule,
+    boostersRule, // before boosts: "Your Boosters" also matches /boost/
     makeBoostsRule(now),
     purchaseRule,
     dailyRule,

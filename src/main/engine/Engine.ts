@@ -294,7 +294,10 @@ export class Engine {
 
   private route(ev: GameEvent, replyTo: QueuedCommand | null): void {
     if (this.captcha.handle(ev)) return
-    this.gameState.apply(ev) // stats/log only: GameState never sends anything
+    // the reply to /use has no known format: logged as is (system), not as an unknown message
+    if (replyTo?.name === 'use' && ev.kind === 'unknown') {
+      this.gameState.note('system', `/use: ${ev.title ? `${ev.title} — ${ev.text}` : ev.text}`)
+    } else this.gameState.apply(ev) // stats/log only: GameState never sends anything
     if (this.graceful) return void (replyTo && this.gracefulSettled(replyTo.name))
     // In captcha (and idle/connecting/error) nothing may trigger a command.
     if (!ACTIVE.includes(this.current)) return
@@ -302,6 +305,7 @@ export class Engine {
     if (ev.kind === 'cooldown') this.onCooldown(ev.waitMs, replyTo)
     else this.scheduler.onEvent(ev)
     if (replyTo?.name === 'fish' && ev.kind !== 'catch' && ev.kind !== 'cooldown') this.scheduler.retryFish()
+    if (replyTo?.name === 'use') this.scheduler.afterUse()
     // /boosts answered by something else: arm the buffs without endsAt rather than never
     if (replyTo?.key === 'boosts' && ev.kind !== 'boosts') this.scheduler.onCommandFailed(replyTo)
   }

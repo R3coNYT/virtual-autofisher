@@ -37,7 +37,8 @@ export class GameState {
       bait: null,
       fishValue: null,
       rare: noRare(),
-      totals: {}
+      totals: {},
+      personalBoosters: null
     },
     boosts: [],
     quests: [],
@@ -122,6 +123,9 @@ export class GameState {
         case 'boosts':
           b.boosts = e.active.map((x) => ({ ...x }))
           break
+        case 'boosters':
+          b.account.personalBoosters = e.personal
+          break
         case 'purchase':
           log('trade', `Bought: ${e.amount}× ${e.item}${e.cost !== undefined ? ` (${money(e.cost)})` : ''}`)
           break
@@ -152,6 +156,11 @@ export class GameState {
           break
       }
     })
+  }
+
+  /** A free log line (e.g. the unknown reply to /use). */
+  note(type: LogEntry['type'], text: string): void {
+    this.mutate((_b, log) => log(type, text))
   }
 
   markCommandSent(_name: string): void {

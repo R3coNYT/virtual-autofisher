@@ -163,6 +163,26 @@ describe('GameState', () => {
     expect(s.log[0]).toMatchObject({ type: 'trade', text: 'Daily reward: 100 $' })
   })
 
+  it('boosters: account.personalBoosters (null until known)', () => {
+    const g = new GameState()
+    expect(g.snapshot().account.personalBoosters).toBeNull()
+    g.apply({ kind: 'boosters', personal: 2 })
+    expect(g.snapshot().account.personalBoosters).toBe(2)
+    g.apply({ kind: 'boosters', personal: 0 })
+    expect(g.snapshot().account.personalBoosters).toBe(0)
+    expect(g.snapshot().log).toHaveLength(0)
+  })
+  it('boosts keep the global booster name', () => {
+    const g = new GameState()
+    g.apply({ kind: 'boosts', active: [{ name: 'Personal', endsAt: 5 }, { name: 'Global', endsAt: 9, by: 'Messor' }] })
+    expect(g.snapshot().boosts).toEqual([{ name: 'Personal', endsAt: 5 }, { name: 'Global', endsAt: 9, by: 'Messor' }])
+  })
+  it('note(): a system log line', () => {
+    const g = new GameState()
+    g.note('system', 'Booster: activated')
+    expect(g.snapshot().log[0]).toMatchObject({ type: 'system', text: 'Booster: activated' })
+  })
+
   const cases: { name: string; ev: GameEvent; check: (s: ReturnType<GameState['snapshot']>) => void; log?: [string, string] }[] = [
     {
       name: 'stats merges totals and extras',

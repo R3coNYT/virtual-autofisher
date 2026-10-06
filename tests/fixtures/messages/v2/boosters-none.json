@@ -1,0 +1,42 @@
+{
+  "id": "2000000000000000005",
+  "channelId": "c1",
+  "content": "",
+  "isEdit": false,
+  "interactionUserId": "111",
+  "rawComponents": [
+    {
+      "type": 17,
+      "components": [
+        {
+          "type": 10,
+          "content": "### Your Boosters"
+        },
+        {
+          "type": 10,
+          "content": "You have no boosters! Get some by donating, or voting."
+        },
+        {
+          "type": 14,
+          "spacing": 1,
+          "divider": true
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "custom_id": "menu",
+              "disabled": false,
+              "emoji": null,
+              "label": "Back",
+              "style": 2,
+              "type": 2,
+              "url": null
+            }
+          ]
+        }
+      ],
+      "spoiler": false
+    }
+  ]
+}

@@ -1,4 +1,5 @@
-import type { Config, GameEvent, SlashCommandInfo } from '../../shared/types'
+import { boosterUseOptions } from '../../shared/boosters'
+import type { Boost, Config, GameEvent, SlashCommandInfo } from '../../shared/types'
 import type { CommandQueue, QueuedCommand } from './CommandQueue'
 import type { GameState } from './GameState'
 import { fishDelayMs, randomBetweenMs } from './humanize'
@@ -44,6 +45,14 @@ export class Scheduler {
   /** Maintenance commands pushed and not yet answered (queued or in flight), by dedupe key. */
   private pending = new Map<string, QueuedCommand>()
   private buyBlockedUntil = { buff: -Infinity, bait: -Infinity }
+  /** End of the active personal boost (last /boosts), null when none. */
+  private personalEndsAt: number | null = null
+  /** /boosters already asked since the last time a personal boost was seen active. */
+  private boostersChecked = false
+  /** /use already sent since the last time a personal boost was seen active (one per expiry). */
+  private boosterUsed = false
+  /** /boosters said 0: no more checks until the next session. */
+  private boostersExhausted = false
   private readonly rand: () => number
 
   constructor(
@@ -62,18 +71,22 @@ export class Scheduler {
   start(): void {
     this.stop()
     this.running = true
+    this.personalEndsAt = null
+    this.boostersChecked = this.boosterUsed = this.boostersExhausted = false
     const cfg = this.getConfig()
-    this.pushFish()
+    // data first (/profile, /boosts, daily, quests), then the first /fish: maintenance outranks fish
     this.loop('profile', () => this.profileTick(), true)
-    this.loop('daily', () => this.dailyTick(), true)
-    this.loop('quests', () => this.questsTick(), true)
-    this.loop('sell', () => this.sellTick(), false, this.sellIntervalMs() ?? POLL_MS)
-    if (cfg.buffs.enabled && this.has('boosts')) {
-      // buff timers are armed from the /boosts reply (endsAt), or by onCommandFailed
-      this.push({ name: 'boosts', priority: 'maintenance', key: 'boosts' })
+    if (this.has('boosts')) {
+      // always refreshed at start; buff timers are armed from its reply (endsAt), or by onCommandFailed
+      this.pushBoosts()
+      if (!cfg.buffs.enabled) this.armBuffs(POLL_MS)
     } else {
       this.armBuffs(cfg.buffs.enabled ? this.buffGraceMs() : POLL_MS)
     }
+    this.loop('daily', () => this.dailyTick(), true)
+    this.loop('quests', () => this.questsTick(), true)
+    this.loop('sell', () => this.sellTick(), false, this.sellIntervalMs() ?? POLL_MS)
+    this.pushFish()
     this.armWork()
   }
 
@@ -123,6 +136,10 @@ export class Scheduler {
           const b = e.active.find((x) => buffType(x.name) === type)
           this.armBuff(type, (b ? Math.max(0, b.endsAt - Date.now()) : 0) + this.buffGraceMs())
         }
+        this.onBoosts(e.active)
+        break
+      case 'boosters':
+        this.onBoosters(e.personal)
         break
       case 'purchase': {
         const type = buffType(e.item)
@@ -185,12 +202,55 @@ export class Scheduler {
     return true
   }
 
+  /** /use got its reply (whatever it says): refresh the active boosts. */
+  afterUse(): void {
+    if (this.running) this.pushBoosts()
+  }
+
   /** Not enough money: stop buying this kind of item for `ms`. */
   blockPurchases(what: 'buff' | 'bait', ms: number): void {
     this.buyBlockedUntil[what] = Date.now() + ms
   }
 
   // ---- features -------------------------------------------------------
+
+  private pushBoosts(): void {
+    if (this.has('boosts')) this.push({ name: 'boosts', priority: 'maintenance', key: 'boosts' })
+  }
+
+  /**
+   * /boosts reply: re-asks /boosts once the next boost ends, and (opt-in) starts the personal
+   * booster check when none is active. A personal boost seen active opens a new check cycle.
+   */
+  private onBoosts(active: Boost[]): void {
+    const now = Date.now()
+    const live = active.filter((b) => b.endsAt > now)
+    const personal = live.find((b) => b.name === 'Personal')
+    this.personalEndsAt = personal?.endsAt ?? null
+    if (personal) this.boostersChecked = this.boosterUsed = false
+    if (live.length) {
+      const next = Math.min(...live.map((b) => b.endsAt))
+      this.set('boosts-expiry', next - now + randomBetweenMs(2, 10, this.rand), () => this.pushBoosts())
+    } else this.clearSlot('boosts-expiry')
+    if (personal || this.boostersChecked || this.boostersExhausted) return
+    if (!this.getConfig().boosters.autoPersonal || !this.has('boosters')) return
+    this.boostersChecked = true
+    this.push({ name: 'boosters', priority: 'maintenance', key: 'boosters' })
+  }
+
+  /** /boosters reply: activates one personal booster when allowed (at most one /use per expiry). */
+  private onBoosters(owned: number): void {
+    if (owned <= 0) {
+      this.boostersExhausted = true
+      return
+    }
+    if (!this.getConfig().boosters.autoPersonal || this.boosterUsed) return
+    if (this.personalEndsAt !== null && this.personalEndsAt > Date.now()) return
+    const options = boosterUseOptions(this.info('use'), 'personal')
+    if (!options) return
+    this.boosterUsed = true
+    this.push({ name: 'use', options, priority: 'maintenance', key: 'use' })
+  }
 
   private fishAfter(ms: number): void {
     this.state.setNextFishAt(Date.now() + ms)
@@ -356,6 +416,12 @@ export class Scheduler {
     const slot: Slot = { fn, remaining: Math.max(0, ms), armedAt: 0, handle: null, kind }
     this.slots.set(name, slot)
     this.sync(name, slot)
+  }
+
+  private clearSlot(name: string): void {
+    const slot = this.slots.get(name)
+    if (slot?.handle) clearTimeout(slot.handle)
+    this.slots.delete(name)
   }
 
   private syncAll(): void {

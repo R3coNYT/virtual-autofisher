@@ -4,6 +4,7 @@ export type DeepPartial<T> = T extends (infer U)[]
     ? { [K in keyof T]?: DeepPartial<T[K]> }
     : T
 
+export type Boost = { name: string; endsAt: number; by?: string }
 export type CatchItem = { name: string; count: number }
 export type RareCounts = { gold: number; emerald: number; lava: number; diamond: number }
 
@@ -79,7 +80,10 @@ export type GameEvent =
       dailyStreak?: number
       totals: Partial<RareCounts>
     }
-  | { kind: 'boosts'; active: { name: string; endsAt: number }[] }
+  /** /boosts. Virtual Fisher's own boosts are named 'Personal' and 'Global' (`by`: current global booster). */
+  | { kind: 'boosts'; active: Boost[] }
+  /** /boosters: personal boosters owned (0 for "You have no boosters!"). */
+  | { kind: 'boosters'; personal: number }
   | { kind: 'purchase'; item: string; amount: number; cost?: number }
   | { kind: 'daily'; reward: string }
   | { kind: 'quests'; quests: { label: string; progress: string; done: boolean }[] }
@@ -112,8 +116,10 @@ export type GameSnapshot = {
     fishValue: number | null
     rare: RareCounts
     totals: Partial<RareCounts> & { crates?: number; quests?: number; trips?: number; dailyStreak?: number }
+    /** Personal boosters owned (last /boosters), null when unknown. */
+    personalBoosters: number | null
   }
-  boosts: { name: string; endsAt: number }[]
+  boosts: Boost[]
   quests: { label: string; progress: string; done: boolean }[]
   session: {
     startedAt: number | null
@@ -140,6 +146,8 @@ export type Config = {
   fishing: { baseCooldownSec: number; jitterSec: number; minGapSec: number }
   sell: { enabled: boolean; mode: 'catches' | 'minutes'; every: number }
   buffs: { enabled: boolean; lengthMin: 5 | 20 }
+  /** autoPersonal: activate a personal booster (/use) whenever none is active and one is owned. */
+  boosters: { autoPersonal: boolean }
   bait: { enabled: boolean; name: string; autoAmount: boolean; amount: number }
   profile: { refreshMin: number }
   daily: { enabled: boolean }
@@ -157,6 +165,7 @@ export const DEFAULT_CONFIG: Config = {
   fishing: { baseCooldownSec: 3.5, jitterSec: 0.8, minGapSec: 2.5 },
   sell: { enabled: true, mode: 'catches', every: 25 },
   buffs: { enabled: false, lengthMin: 5 },
+  boosters: { autoPersonal: false },
   bait: { enabled: false, name: '', autoAmount: true, amount: 0 },
   profile: { refreshMin: 5 },
   daily: { enabled: true },
