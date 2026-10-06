@@ -32,10 +32,22 @@ export const CatchLog = memo(function CatchLog({ log, compact }: { log: LogEntry
   const shown = filtered.slice(-limit)
   const hidden = filtered.length - shown.length
 
+  // newest entries are at the bottom: stick to it unless the user scrolled up to read
   useLayoutEffect(() => {
     const el = box.current
     if (el && atBottom.current) el.scrollTop = el.scrollHeight
   }, [filtered])
+
+  // the box resizes with the window: keep showing the newest entries if we were at the bottom
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      if (atBottom.current) el.scrollTop = el.scrollHeight
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   function onScroll(): void {
     const el = box.current
@@ -43,7 +55,7 @@ export const CatchLog = memo(function CatchLog({ log, compact }: { log: LogEntry
   }
 
   return (
-    <section className={`${cardCls} flex min-h-0 flex-1 flex-col`} aria-label="Journal des prises">
+    <section className={`${cardCls} flex h-full min-h-0 flex-col overflow-hidden`} aria-label="Journal des prises">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5">
         <h3 className="text-sm font-semibold text-white">Journal</h3>
         <div role="group" aria-label="Filtrer le journal" className="flex gap-1">

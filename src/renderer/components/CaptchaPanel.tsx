@@ -68,7 +68,7 @@ function Modal({ captcha, regenAvailable }: { captcha: NonNullable<ReturnType<ty
   function stop(): void {
     setError(null)
     setStopping(true)
-    window.api.engine.stop().catch((e) => {
+    window.api.engine.stop(false).catch((e) => {
       setStopping(false)
       setError(cleanError(e))
     })

@@ -31,14 +31,22 @@ export default function Dashboard(): JSX.Element {
   const log = useStore((s) => s.log)
   const compact = useStore((s) => s.config.ui.compactLog)
   const baseCooldownSec = useStore((s) => s.config.fishing.baseCooldownSec)
+  const sessionMoney = `${signed(session.moneyEarned)} cette session`
 
   return (
     <Background>
-      <div className="flex h-full min-h-[40rem] flex-col">
+      {/* exactly the window height: only the journal (and the side panel) scroll, the page never grows */}
+      <div className="flex h-screen flex-col overflow-hidden">
         <TopBar />
-        <main className="flex min-h-0 flex-1 flex-col gap-4 p-5">
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <StatCard label="Solde" value={formatMoney(account.balance)} sub={`${signed(session.moneyEarned)} cette session`} />
+        <main className="flex min-h-0 flex-1 flex-col gap-3 p-5">
+          <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard
+              label="Solde"
+              value={formatMoney(account.balance)}
+              sub={account.fishValue != null ? `Poissons : ${formatMoney(account.fishValue)}` : sessionMoney}
+            >
+              {account.fishValue != null && <p className="mt-0.5 truncate text-xs text-slate-400">{sessionMoney}</p>}
+            </StatCard>
             <StatCard
               label="Niveau"
               value={account.level ?? '—'}
@@ -54,13 +62,19 @@ export default function Dashboard(): JSX.Element {
               aside={<CooldownRing nextFishAt={nextFishAt} fallbackMs={baseCooldownSec * 1000} />}
             />
           </div>
-          <BoostChips boosts={boosts} />
-          <RareFishGrid session={session.rareCaught} total={account.rare} />
-          <div className="grid min-h-[16rem] flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_18rem]">
+          <div className="shrink-0">
+            <BoostChips boosts={boosts} />
+          </div>
+          <div className="shrink-0">
+            <RareFishGrid session={session.rareCaught} total={account.rare} />
+          </div>
+          <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_17rem]">
             <CatchLog log={log} compact={compact} />
             <SidePanel account={account} quests={quests} nextDailyAt={nextDailyAt} />
           </div>
-          <CommandBar />
+          <div className="shrink-0">
+            <CommandBar />
+          </div>
         </main>
       </div>
     </Background>

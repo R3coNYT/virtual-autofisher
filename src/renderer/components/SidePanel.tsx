@@ -24,7 +24,7 @@ export const SidePanel = memo(function SidePanel({ account, quests, nextDailyAt 
   const now = useNow()
   const daily = nextDailyAt == null ? '—' : nextDailyAt <= now ? 'Disponible' : formatDuration(nextDailyAt - now)
   return (
-    <aside aria-label="Informations du compte" className={`${cardCls} flex flex-col gap-4 p-4`}>
+    <aside aria-label="Informations du compte" className={`${cardCls} flex min-h-0 flex-col gap-4 overflow-y-auto p-4`}>
       <div className="flex flex-col gap-2">
         <Row icon={<Fish className="h-4 w-4" />} label="Canne" value={account.rod ?? '—'} />
         <Row icon={<Map className="h-4 w-4" />} label="Biome" value={account.biome ?? '—'} />

@@ -13,7 +13,14 @@ const PAUSE = 'border-amber-300/30 bg-amber-400/10 text-amber-300 hover:bg-amber
 const STOP = 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
 const ICON = 'h-3.5 w-3.5'
 
-function Control(props: { label: string; icon: ReactNode; run: () => Promise<void>; tone: string }): JSX.Element {
+function Control(props: {
+  label: string
+  icon: ReactNode
+  run: () => Promise<void>
+  tone: string
+  title?: string
+  disabled?: boolean
+}): JSX.Element {
   const [pending, setPending] = useState(false)
   const onClick = (): void => {
     setPending(true)
@@ -23,7 +30,13 @@ function Control(props: { label: string; icon: ReactNode; run: () => Promise<voi
       .finally(() => setPending(false))
   }
   return (
-    <button type="button" onClick={onClick} disabled={pending} className={`${ctl} ${props.tone}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending || props.disabled}
+      title={props.title}
+      className={`${ctl} ${props.tone}`}
+    >
       {props.icon}
       {props.label}
     </button>
@@ -98,11 +111,32 @@ export const TopBar = memo(function TopBar(): JSX.Element {
         {(state === 'running' || state === 'resting') && (
           <Control label="Pause" icon={<Pause className={ICON} aria-hidden />} run={() => engine.pause()} tone={PAUSE} />
         )}
+        {state === 'stopping' && (
+          // final /profile + /quests under way: nothing to pause; a second stop forces the halt
+          <Control label="Pause" icon={<Pause className={ICON} aria-hidden />} run={async () => undefined} tone={PAUSE} disabled />
+        )}
         {state === 'paused' && (
           <Control label="Reprendre" icon={<Play className={ICON} aria-hidden />} run={() => engine.resume()} tone={GO} />
         )}
-        {state !== 'idle' && state !== 'error' && (
-          <Control label="Arrêter" icon={<Square className={ICON} aria-hidden />} run={() => engine.stop()} tone={STOP} />
+        {state === 'stopping' ? (
+          <Control
+            label="Forcer l'arrêt"
+            title="Arrêter tout de suite, sans attendre /profile et /quests"
+            icon={<Square className={ICON} aria-hidden />}
+            run={() => engine.stop(false)}
+            tone={STOP}
+          />
+        ) : (
+          state !== 'idle' &&
+          state !== 'error' && (
+            <Control
+              label="Arrêter"
+              title="Arrêt propre : /profile et /quests puis arrêt"
+              icon={<Square className={ICON} aria-hidden />}
+              run={() => engine.stop(true)}
+              tone={STOP}
+            />
+          )
         )}
         <button
           type="button"
