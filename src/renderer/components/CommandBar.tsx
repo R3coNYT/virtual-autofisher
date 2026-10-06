@@ -3,7 +3,14 @@ import type { FormEvent } from 'react'
 import { Send } from 'lucide-react'
 import { boosterUseOptions } from '../../shared/boosters'
 import type { SlashCommandInfo } from '../../shared/types'
-import { coinflipOptionNames, commandLockReason, parseCommandLine, sellAllOptions } from '../format'
+import {
+  choiceCommandOptions,
+  choiceFields,
+  coinflipOptionNames,
+  commandLockReason,
+  parseCommandLine,
+  sellAllOptions
+} from '../format'
 import { useStore } from '../store'
 import { cleanError, focusRing } from '../ui'
 import { cardCls } from './StatCard'
@@ -25,12 +32,62 @@ const QUICK: Quick[] = [
   { label: '/boosters', name: 'boosters' },
   { label: '/use Personal', name: 'use', options: (c) => boosterUseOptions(c, 'personal'), missingChoice: 'Personal' },
   { label: '/use Global', name: 'use', options: (c) => boosterUseOptions(c, 'global'), missingChoice: 'Global' },
-  { label: '/profile', name: 'profile' },
-  { label: '/top', name: 'top' }
+  { label: '/profile', name: 'profile' }
 ]
+
+/** Commands sent with a pick for each of their choice options (e.g. /top category). */
+const CHOICE_COMMANDS = ['top']
 
 const btn = `rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 ${focusRing}`
 const field = `rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 disabled:opacity-40 ${focusRing}`
+
+/** A command with one select per choice option (optional ones start empty), plus its send button. */
+function ChoiceCommand(props: {
+  name: string
+  cmd: SlashCommandInfo | undefined
+  reason: string | undefined
+  onSend: (name: string, options: Record<string, string>) => void
+}): JSX.Element {
+  const { name, cmd, reason, onSend } = props
+  const [picked, setPicked] = useState<Record<string, string>>({})
+  const fields = cmd ? choiceFields(cmd) : []
+  const values = cmd ? choiceCommandOptions(cmd, picked) : {}
+  return (
+    <div className="flex items-center gap-1.5 border-l border-white/10 pl-2" role="group" aria-label={`/${name}`}>
+      {fields.map((f) => (
+        <select
+          key={f.name}
+          aria-label={`/${name} ${f.name}`}
+          title={f.name}
+          value={values[f.name] ?? ''}
+          onChange={(e) => setPicked((p) => ({ ...p, [f.name]: e.target.value }))}
+          disabled={!!reason}
+          className={field}
+        >
+          {!f.required && (
+            <option value="" className="bg-ocean">
+              {f.name}: any
+            </option>
+          )}
+          {f.choices.map((c) => (
+            <option key={c.value} value={c.value} className="bg-ocean">
+              {c.label}
+            </option>
+          ))}
+        </select>
+      ))}
+      <button
+        type="button"
+        className={btn}
+        disabled={!!reason}
+        title={reason ?? `Send /${name}`}
+        onClick={() => cmd && onSend(name, values)}
+      >
+        /{name}
+      </button>
+    </div>
+  )
+}
 
 export const CommandBar = memo(function CommandBar(): JSX.Element {
   const commands = useStore((s) => s.commands)
@@ -86,6 +143,10 @@ export const CommandBar = memo(function CommandBar(): JSX.Element {
           </button>
         )
       })}
+
+      {CHOICE_COMMANDS.map((name) => (
+        <ChoiceCommand key={name} name={name} cmd={find(name)} reason={reasonFor(name)} onSend={send} />
+      ))}
 
       <div className="flex items-center gap-1.5 border-l border-white/10 pl-2" role="group" aria-label="Coinflip">
         <select

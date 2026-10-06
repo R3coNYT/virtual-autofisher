@@ -29,7 +29,8 @@ export type SlashCommandInfo = {
   name: string
   id: string
   version: string
-  options: { name: string; type: number; required: boolean; choices?: string[] }[]
+  /** `choiceNames[i]` is the display label of `choices[i]` (the value sent). */
+  options: { name: string; type: number; required: boolean; choices?: string[]; choiceNames?: string[] }[]
 }
 
 export type BotMessage = {

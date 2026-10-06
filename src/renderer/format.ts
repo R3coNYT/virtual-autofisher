@@ -126,6 +126,33 @@ export function sellAllOptions(cmd: SlashCommandInfo): Record<string, string | n
   return { [opt.name]: all }
 }
 
+export type ChoiceField = { name: string; required: boolean; choices: { value: string; label: string }[] }
+
+/** One field per option of `cmd` that has choices (e.g. /top category), with display labels. */
+export function choiceFields(cmd: SlashCommandInfo): ChoiceField[] {
+  return cmd.options
+    .filter((o) => o.choices?.length)
+    .map((o) => ({
+      name: o.name,
+      required: o.required,
+      choices: (o.choices ?? []).map((value, i) => ({
+        value,
+        label: o.choiceNames?.[i] ?? value.charAt(0).toUpperCase() + value.slice(1)
+      }))
+    }))
+}
+
+/** Options to send for a choice command: invalid/empty values dropped, required ones default to their first choice. */
+export function choiceCommandOptions(cmd: SlashCommandInfo, selected: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const f of choiceFields(cmd)) {
+    const v = selected[f.name]
+    if (v && f.choices.some((c) => c.value === v)) out[f.name] = v
+    else if (f.required) out[f.name] = f.choices[0].value
+  }
+  return out
+}
+
 /** Quest completion 0..1 from a "3/10" style progress string. */
 export function questRatio(progress: string, done: boolean): number {
   if (done) return 1

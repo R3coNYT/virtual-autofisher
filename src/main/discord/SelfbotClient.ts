@@ -278,7 +278,9 @@ export class SelfbotClient implements DiscordClient {
           name: o.name,
           type: o.type,
           required: o.required ?? false,
-          ...(o.choices ? { choices: o.choices.map((ch) => String(ch.value)) } : {})
+          ...(o.choices
+            ? { choices: o.choices.map((ch) => String(ch.value)), choiceNames: o.choices.map((ch) => ch.name) }
+            : {})
         }))
       }))
     this.commandsByGuild.set(guildId, cmds)
