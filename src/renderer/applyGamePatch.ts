@@ -43,7 +43,9 @@ export function emptySnapshot(): GameSnapshot {
       sells: 0,
       captchas: 0,
       commandsSent: 0,
-      rareCaught: { gold: 0, emerald: 0, lava: 0, diamond: 0 }
+      rareCaught: { gold: 0, emerald: 0, lava: 0, diamond: 0 },
+      fishValueStart: null,
+      valueGained: null
     },
     nextFishAt: null,
     nextDailyAt: null,

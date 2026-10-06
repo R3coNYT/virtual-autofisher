@@ -9,6 +9,15 @@ export function formatMoney(n: number | null | undefined): string {
   return `${r < 0 ? '-' : ''}$${intFmt.format(Math.abs(r))}`
 }
 
+/**
+ * Balance card: session gain = fish value progress + sells (GameState session.valueGained).
+ * 1500 -> "+$1,500 this session"; null (no /profile yet this session) -> "— this session".
+ */
+export function formatSessionGain(valueGained: number | null): string {
+  if (valueGained == null || !Number.isFinite(valueGained)) return '— this session'
+  return `${valueGained < 0 ? '' : '+'}${formatMoney(valueGained)} this session`
+}
+
 /** 1234567 -> "1,234,567" (en-US). */
 export function formatInt(n: number): string {
   return intFmt.format(Math.round(n))

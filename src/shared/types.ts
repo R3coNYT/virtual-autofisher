@@ -85,7 +85,8 @@ export type GameEvent =
   /** /boosters: personal boosters owned (0 for "You have no boosters!"). */
   | { kind: 'boosters'; personal: number }
   | { kind: 'purchase'; item: string; amount: number; cost?: number }
-  | { kind: 'daily'; reward: string }
+  /** `nextInMs`: when the reply states when the next daily is available. */
+  | { kind: 'daily'; reward: string; nextInMs?: number }
   | { kind: 'quests'; quests: { label: string; progress: string; done: boolean }[] }
   | { kind: 'cooldown'; waitMs: number }
   | { kind: 'captcha'; imageUrl?: string; text: string }
@@ -131,11 +132,21 @@ export type GameSnapshot = {
     captchas: number
     commandsSent: number
     rareCaught: RareCounts
+    /** Fish value of the first /profile of the session (null until then). */
+    fishValueStart: number | null
+    /** (latest fish value - fishValueStart) + money earned from sells; null before the first /profile. */
+    valueGained: number | null
   }
   nextFishAt: number | null
   nextDailyAt: number | null
   log: LogEntry[]
 }
+
+/** Account values kept between sessions and app restarts (state.json). */
+export type PersistedAccount = Pick<
+  GameSnapshot['account'],
+  'balance' | 'fishValue' | 'level' | 'xpToNext' | 'rod' | 'biome' | 'bait' | 'rare' | 'totals' | 'personalBoosters'
+>
 
 export type SessionSummary = GameSnapshot['session'] & { endedAt: number }
 

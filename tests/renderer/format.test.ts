@@ -4,6 +4,7 @@ import {
   formatCompact,
   formatDuration,
   formatMoney,
+  formatSessionGain,
   logFilter,
   coinflipOptionNames,
   parseCommandLine,
@@ -23,6 +24,15 @@ describe('formatMoney', () => {
   it('rounds and tolerates null', () => {
     expect(formatMoney(12.6)).toBe('$13')
     expect(formatMoney(null)).toBe('—')
+  })
+})
+
+describe('formatSessionGain', () => {
+  it('signed en-US money with "this session"; "—" before the first /profile', () => {
+    expect(formatSessionGain(1234567)).toBe('+$1,234,567 this session')
+    expect(formatSessionGain(0)).toBe('+$0 this session')
+    expect(formatSessionGain(-1500)).toBe('-$1,500 this session')
+    expect(formatSessionGain(null)).toBe('— this session')
   })
 })
 

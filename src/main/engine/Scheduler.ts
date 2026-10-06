@@ -282,8 +282,15 @@ export class Scheduler {
     return m * MIN
   }
 
+  /**
+   * /daily only when it is due: nextDailyAt unknown (never seen, or not persisted) or passed.
+   * Otherwise the slot fires again 1–5 min after nextDailyAt (if the session still runs then).
+   */
   private dailyTick(): number | null {
     if (!this.getConfig().daily.enabled || !this.has('daily')) return null
+    const next = this.state.nextDailyAt
+    const now = Date.now()
+    if (next !== null && now < next) return next - now + randomBetweenMs(60, 5 * 60, this.rand)
     this.push({ name: 'daily', priority: 'maintenance', key: 'daily' })
     return DAILY_MS + randomBetweenMs(2 * 60, 10 * 60, this.rand)
   }

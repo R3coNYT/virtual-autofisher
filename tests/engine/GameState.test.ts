@@ -183,6 +183,93 @@ describe('GameState', () => {
     expect(g.snapshot().log[0]).toMatchObject({ type: 'system', text: 'Booster: activated' })
   })
 
+  describe('session value gained (fish value progress + sells)', () => {
+    const invFv = (fishValue?: number): GameEvent => ({ ...inv(), ...(fishValue !== undefined ? { fishValue } : {}) }) as GameEvent
+    it('null until the first /profile of the session, then (fishValue − start) + sells', () => {
+      const g = new GameState()
+      g.apply(invFv(5_000)) // before the session: not a start value
+      g.startSession()
+      expect(g.snapshot().session).toMatchObject({ fishValueStart: null, valueGained: null })
+      g.apply(invFv(1_000))
+      expect(g.snapshot().session).toMatchObject({ fishValueStart: 1_000, valueGained: 0 })
+      g.apply(fish([{ name: 'Cod', count: 3 }]))
+      g.apply(invFv(1_300))
+      expect(g.snapshot().session.valueGained).toBe(300)
+      g.apply({ kind: 'sell', earned: 1_300 }) // fish value turned into balance
+      g.apply(invFv(0))
+      expect(g.snapshot().session.valueGained).toBe(300)
+      g.apply(invFv(250))
+      expect(g.snapshot().session.valueGained).toBe(550)
+      g.apply(inv()) // no fish value in this /profile: gain unchanged
+      expect(g.snapshot().session.valueGained).toBe(550)
+    })
+    it('a new session starts from its own first /profile', () => {
+      const g = new GameState()
+      g.startSession()
+      g.apply(invFv(1_000))
+      g.apply(invFv(2_000))
+      g.startSession()
+      expect(g.snapshot().session).toMatchObject({ fishValueStart: null, valueGained: null })
+      g.apply(invFv(2_000))
+      expect(g.snapshot().session).toMatchObject({ fishValueStart: 2_000, valueGained: 0 })
+    })
+  })
+
+  describe('persistence', () => {
+    it('hydrate sets account and nextDailyAt, emits a patch, leaves the session alone', () => {
+      const g = new GameState(() => 50)
+      const cb = vi.fn()
+      g.onPatch(cb)
+      g.hydrate({
+        account: { balance: 1234, fishValue: 99, level: 7, rod: 'Rod', personalBoosters: 2, rare: { gold: 1, emerald: 2, lava: 3, diamond: 4 } },
+        nextDailyAt: 777
+      })
+      const s = g.snapshot()
+      expect(s.account).toMatchObject({ balance: 1234, fishValue: 99, level: 7, rod: 'Rod', personalBoosters: 2, biome: null })
+      expect(s.account.rare).toEqual({ gold: 1, emerald: 2, lava: 3, diamond: 4 })
+      expect(s.nextDailyAt).toBe(777)
+      expect(s.session).toEqual(new GameState().snapshot().session)
+      expect(s.log).toHaveLength(0)
+      expect(cb).toHaveBeenCalledTimes(1)
+      expect(cb.mock.calls[0][0].session).toBeUndefined()
+      expect(g.baitEstimate).toBeNull()
+    })
+    it('persisted() returns the account values and nextDailyAt only', () => {
+      const g = new GameState(() => 1000)
+      g.startSession()
+      g.apply({ ...inv(), fishValue: 42 } as GameEvent)
+      g.apply({ kind: 'boosters', personal: 1 })
+      g.apply({ kind: 'daily', reward: 'x' })
+      expect(g.persisted()).toEqual({
+        account: {
+          balance: 500,
+          fishValue: 42,
+          level: 10,
+          xpToNext: 40,
+          rod: 'Rod',
+          biome: 'River',
+          bait: { name: 'Common', count: 100 },
+          rare: { gold: 1, emerald: 0, lava: 0, diamond: 0 },
+          totals: {},
+          personalBoosters: 1
+        },
+        nextDailyAt: 1000 + 86400000
+      })
+    })
+    it('nextDailyAt getter', () => {
+      const g = new GameState()
+      expect(g.nextDailyAt).toBeNull()
+      g.setNextDailyAt(5)
+      expect(g.nextDailyAt).toBe(5)
+    })
+  })
+
+  it('daily with a stated next time uses it instead of 24 h', () => {
+    const g = new GameState(() => 1000)
+    g.apply({ kind: 'daily', reward: 'x', nextInMs: 3_600_000 })
+    expect(g.snapshot().nextDailyAt).toBe(1000 + 3_600_000)
+  })
+
   const cases: { name: string; ev: GameEvent; check: (s: ReturnType<GameState['snapshot']>) => void; log?: [string, string] }[] = [
     {
       name: 'stats merges totals and extras',

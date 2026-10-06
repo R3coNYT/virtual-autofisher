@@ -1,4 +1,4 @@
-import type { DeepPartial, GameEvent, GameSnapshot, LogEntry, RareCounts, SessionSummary } from '../../shared/types'
+import type { DeepPartial, GameEvent, GameSnapshot, LogEntry, PersistedAccount, RareCounts, SessionSummary } from '../../shared/types'
 
 type Session = GameSnapshot['session']
 type PatchCb = (patch: DeepPartial<GameSnapshot>, newLog: LogEntry[]) => void
@@ -19,8 +19,25 @@ const emptySession = (): Session => ({
   sells: 0,
   captchas: 0,
   commandsSent: 0,
-  rareCaught: noRare()
+  rareCaught: noRare(),
+  fishValueStart: null,
+  valueGained: null
 })
+const PERSISTED_KEYS = [
+  'balance',
+  'fishValue',
+  'level',
+  'xpToNext',
+  'rod',
+  'biome',
+  'bait',
+  'rare',
+  'totals',
+  'personalBoosters'
+] as const satisfies readonly (keyof PersistedAccount)[]
+
+/** What GameState keeps between sessions and app restarts. */
+export type PersistedGameState = { account: PersistedAccount; nextDailyAt: number | null }
 /** 1234 -> "$1,234" (en-US). */
 const money = (n: number): string => `$${Math.round(n).toLocaleString('en-US')}`
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -59,6 +76,9 @@ export class GameState {
   }
   get baitEstimate(): number | null {
     return this.bait
+  }
+  get nextDailyAt(): number | null {
+    return this.body.nextDailyAt
   }
 
   snapshot(): GameSnapshot {
@@ -111,6 +131,11 @@ export class GameState {
             rare: { ...e.rare }
           })
           this.bait = e.bait ? e.bait.count : null
+          if (e.fishValue !== undefined && s.startedAt !== null) {
+            s.fishValueStart ??= e.fishValue
+            // sells turn fish value into balance: adding them keeps the gain right across a sell
+            s.valueGained = e.fishValue - s.fishValueStart + s.moneyEarned
+          }
           break
         case 'stats': {
           const totals: Body['account']['totals'] = { ...e.totals }
@@ -130,7 +155,7 @@ export class GameState {
           log('trade', `Bought: ${e.amount}× ${e.item}${e.cost !== undefined ? ` (${money(e.cost)})` : ''}`)
           break
         case 'daily':
-          b.nextDailyAt = this.now() + DAY_MS
+          b.nextDailyAt = this.now() + (e.nextInMs ?? DAY_MS)
           log('trade', `Daily reward: ${e.reward}`)
           break
         case 'quests':
@@ -183,6 +208,26 @@ export class GameState {
     this.mutate((b) => {
       b.nextDailyAt = ts
     })
+  }
+
+  /**
+   * Last known account values and next daily (state.json), loaded at boot: shown at once,
+   * before any /profile. Counts nothing in the session.
+   */
+  hydrate(p: { account?: Partial<PersistedAccount>; nextDailyAt?: number | null }): void {
+    this.mutate((b) => {
+      for (const k of PERSISTED_KEYS) {
+        const v = p.account?.[k]
+        if (v !== undefined) (b.account as Record<string, unknown>)[k] = structuredClone(v)
+      }
+      if (p.nextDailyAt !== undefined) b.nextDailyAt = p.nextDailyAt
+    })
+  }
+
+  persisted(): PersistedGameState {
+    const account = {} as Record<string, unknown>
+    for (const k of PERSISTED_KEYS) account[k] = structuredClone(this.body.account[k])
+    return { account: account as PersistedAccount, nextDailyAt: this.body.nextDailyAt }
   }
 
   /** Zeroes the session counters: the previous session stays visible until the next one starts. */

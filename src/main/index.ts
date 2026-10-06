@@ -7,6 +7,8 @@ import { Engine } from './engine/Engine'
 import { GameState } from './engine/GameState'
 import { registerHandlers } from './ipc/handlers'
 import { notifyCaptcha, notifyLevelUp, notifyRareFish } from './notify'
+import { StateStore } from './persist/StateStore'
+import { wireStatePersistence } from './persist/wireStatePersistence'
 import { levelUpFromLog, rareIncreases } from './notifyEvents'
 import { createTray, resourcePath } from './tray'
 import { createLogger } from './util/logger'
@@ -81,6 +83,8 @@ function boot(): void {
   client = discord
   const state = new GameState()
   const engine = new Engine({ client: discord, config, state, logger })
+  // last known account values and next daily (state.json): on screen before the login completes
+  const persisted = wireStatePersistence({ state, engine, store: new StateStore(userData, logger), logger })
 
   let win = createWindow()
   const send = (channel: string, payload: unknown): void => {
@@ -151,6 +155,7 @@ function boot(): void {
     } catch (e) {
       logger.error('engine.stop on quit failed', e)
     }
+    persisted.save() // also saved by the session end above; covers quitting while idle
     tray.destroy() // after engine.stop(): its state change still refreshes a live tray
     void discord.logout().catch(() => {})
   })

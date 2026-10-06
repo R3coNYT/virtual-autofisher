@@ -124,6 +124,13 @@ describe('parseMessage fixtures', () => {
     const e = parseMessage(load('daily'), NOW)
     expect(e.kind).toBe('daily')
     if (e.kind === 'daily') expect(e.reward).toContain('$5,000')
+    if (e.kind === 'daily') expect(e.nextInMs).toBeUndefined()
+  })
+
+  it('daily stating when the next one is available', () => {
+    const msg = load('daily')
+    msg.embeds[0].description += '\nNext daily in **23h 59m**'
+    expect(parseMessage(msg, NOW)).toMatchObject({ kind: 'daily', nextInMs: (23 * 60 + 59) * 60_000 })
   })
 
   it('quests', () => {

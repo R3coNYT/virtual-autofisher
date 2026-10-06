@@ -7,13 +7,9 @@ import { RareFishGrid } from '../components/RareFishGrid'
 import { SidePanel } from '../components/SidePanel'
 import { StatCard } from '../components/StatCard'
 import { TopBar } from '../components/TopBar'
-import { catchesPerHour, formatInt, formatMoney } from '../format'
+import { catchesPerHour, formatInt, formatMoney, formatSessionGain } from '../format'
 import { useStore } from '../store'
 import { useNow } from '../useNow'
-
-function signed(n: number): string {
-  return `${n >= 0 ? '+' : '−'}${formatMoney(Math.abs(n))}`
-}
 
 function RateCard({ catches, startedAt }: { catches: number; startedAt: number | null }): JSX.Element {
   const now = useNow()
@@ -31,7 +27,7 @@ export default function Dashboard(): JSX.Element {
   const log = useStore((s) => s.log)
   const compact = useStore((s) => s.config.ui.compactLog)
   const baseCooldownSec = useStore((s) => s.config.fishing.baseCooldownSec)
-  const sessionMoney = `${signed(session.moneyEarned)} this session`
+  const sessionMoney = formatSessionGain(session.valueGained)
 
   return (
     <Background>
