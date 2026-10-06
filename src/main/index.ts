@@ -169,6 +169,10 @@ function boot(): void {
   })
 }
 
+// Same id as electron-builder's appId: Windows then shows the app's own icon/name for the
+// taskbar group and notifications instead of Electron's.
+if (process.platform === 'win32') app.setAppUserModelId('com.r3con.virtualautofisher')
+
 if (!app.requestSingleInstanceLock()) {
   app.quit() // another instance runs (it is brought to the front by 'second-instance')
 } else {

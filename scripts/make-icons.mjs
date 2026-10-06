@@ -42,20 +42,23 @@ function shade(x, y, accent) {
   return c
 }
 
-function render(accent) {
-  const px = Buffer.alloc(SIZE * SIZE * 4)
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
+/** Renders the 256-unit design at `size` px (supersampled; more samples for small sizes). */
+function render(accent, size = SIZE) {
+  const k = SIZE / size
+  const ss = Math.max(SS, Math.ceil(SS * k / 2))
+  const px = Buffer.alloc(size * size * 4)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       let r = 0, g = 0, b = 0, a = 0
-      for (let sy = 0; sy < SS; sy++) {
-        for (let sx = 0; sx < SS; sx++) {
-          const c = shade(x + (sx + 0.5) / SS, y + (sy + 0.5) / SS, accent)
+      for (let sy = 0; sy < ss; sy++) {
+        for (let sx = 0; sx < ss; sx++) {
+          const c = shade((x + (sx + 0.5) / ss) * k, (y + (sy + 0.5) / ss) * k, accent)
           if (c) { r += c[0]; g += c[1]; b += c[2]; a++ }
         }
       }
-      const o = (y * SIZE + x) * 4
+      const o = (y * size + x) * 4
       if (a) { px[o] = Math.round(r / a); px[o + 1] = Math.round(g / a); px[o + 2] = Math.round(b / a) }
-      px[o + 3] = Math.round((a / (SS * SS)) * 255)
+      px[o + 3] = Math.round((a / (ss * ss)) * 255)
     }
   }
   return px
@@ -80,14 +83,14 @@ const chunk = (type, data) => {
   return Buffer.concat([len, td, crc])
 }
 
-function png(rgba) {
+function png(rgba, size = SIZE) {
   const ihdr = Buffer.alloc(13)
-  ihdr.writeUInt32BE(SIZE, 0)
-  ihdr.writeUInt32BE(SIZE, 4)
+  ihdr.writeUInt32BE(size, 0)
+  ihdr.writeUInt32BE(size, 4)
   ihdr[8] = 8 // bit depth
   ihdr[9] = 6 // RGBA
-  const raw = Buffer.alloc((SIZE * 4 + 1) * SIZE)
-  for (let y = 0; y < SIZE; y++) rgba.copy(raw, y * (SIZE * 4 + 1) + 1, y * SIZE * 4, (y + 1) * SIZE * 4)
+  const raw = Buffer.alloc((size * 4 + 1) * size)
+  for (let y = 0; y < size; y++) rgba.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4)
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
@@ -96,18 +99,23 @@ function png(rgba) {
   ])
 }
 
-/** ICO container with a single PNG-compressed 256x256 image. */
-function ico(pngBuf) {
-  const head = Buffer.alloc(6 + 16)
+/** ICO container with one PNG-compressed image per size (Windows picks the closest: crisp taskbar/shortcut). */
+function ico(images) {
+  const head = Buffer.alloc(6 + 16 * images.length)
   head.writeUInt16LE(1, 2) // type: icon
-  head.writeUInt16LE(1, 4) // count
-  head[6] = 0 // width 256
-  head[7] = 0 // height 256
-  head.writeUInt16LE(1, 10) // planes
-  head.writeUInt16LE(32, 12) // bpp
-  head.writeUInt32LE(pngBuf.length, 14)
-  head.writeUInt32LE(22, 18) // data offset
-  return Buffer.concat([head, pngBuf])
+  head.writeUInt16LE(images.length, 4)
+  let offset = head.length
+  images.forEach(({ size, data }, i) => {
+    const e = 6 + 16 * i
+    head[e] = size >= 256 ? 0 : size // 0 means 256
+    head[e + 1] = size >= 256 ? 0 : size
+    head.writeUInt16LE(1, e + 4) // planes
+    head.writeUInt16LE(32, e + 6) // bpp
+    head.writeUInt32LE(data.length, e + 8)
+    head.writeUInt32LE(offset, e + 12)
+    offset += data.length
+  })
+  return Buffer.concat([head, ...images.map((im) => im.data)])
 }
 
 mkdirSync('resources', { recursive: true })
@@ -116,5 +124,6 @@ const normal = png(render(hex('#22d3ee')))
 const alert = png(render(hex('#ef4444')))
 writeFileSync('resources/icon.png', normal)
 writeFileSync('resources/icon-alert.png', alert)
-writeFileSync('build/icon.ico', ico(normal))
+const cyan = hex('#22d3ee')
+writeFileSync('build/icon.ico', ico([16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, data: png(render(cyan, size), size) }))))
 console.log('icons written')
