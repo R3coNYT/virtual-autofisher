@@ -57,7 +57,10 @@ afterEach(() => {
 
 describe('daily gating with nextDailyAt', () => {
   it('unknown nextDailyAt → /daily at start; success → next one 24 h later', async () => {
-    const { engine, state, dailies, names } = setup()
+    // only /daily matters here: hourly fishing keeps 24 simulated hours cheap (slow CI runners)
+    const { engine, state, dailies, names } = setup(undefined, (c) => {
+      c.fishing.baseCooldownSec = 3600
+    })
     const t0 = Date.now()
     await engine.start(A)
     expect(names()).toEqual(['daily'])
