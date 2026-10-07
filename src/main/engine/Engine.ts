@@ -24,6 +24,8 @@ export type EngineDeps = {
 }
 
 const RESPONSE_TIMEOUT_MS = 8_000
+/** A deferred reply ("is thinking…", e.g. while a captcha is generated) may take longer. */
+const DEFERRED_REPLY_TIMEOUT_MS = 30_000
 const MAX_FAILURES = 3
 const NETWORK_GRACE_MS = 2 * 60_000
 const RATE_LIMIT_FACTOR = 1.5
@@ -81,6 +83,8 @@ export class Engine {
   private readonly getConfig: EngineDeps['config']['get']
   /** Command whose reply we are waiting for (cleared by the reply or a timeout). */
   private awaiting: QueuedCommand | null = null
+  /** The in-flight command answered by a Discord "is thinking…" placeholder: its edit is the reply. */
+  private deferredReply: { id: string; cmd: QueuedCommand } | null = null
   /** Copies pushed by retryOnce: they are not retried again. */
   private retries = new WeakSet<QueuedCommand>()
   /** Copies re-sent after a "wait N" reply: a second cooldown is not deferred again. */
@@ -225,6 +229,7 @@ export class Engine {
 
       this.failures = 0
       this.awaiting = null
+      this.deferredReply = null
       this.gameState.startSession()
       this.sessionActive = true
       this.sessionStartedAt = Date.now()
@@ -365,6 +370,19 @@ export class Engine {
 
   private onBotMessage(m: BotMessage): void {
     if (!this.target) return // not listening (logged out, or no channel chosen yet)
+    // Deferred reply: the placeholder does not answer the command (nothing else may be sent
+    // meanwhile, e.g. no extra /fish while a captcha is being generated); its edit does.
+    if (m.loading) {
+      if (!m.isEdit && this.awaiting) {
+        this.deferredReply = { id: m.id, cmd: this.awaiting }
+        this.queue.extendTimeout(DEFERRED_REPLY_TIMEOUT_MS)
+      }
+      return
+    }
+    if (m.isEdit && this.deferredReply?.id === m.id) {
+      this.deferredReply = null
+      m = { ...m, isEdit: false } // the real reply to the in-flight command
+    }
     const ev = parseMessage(m, Date.now())
     let text = ''
     try {
@@ -447,6 +465,7 @@ export class Engine {
 
   private onNoAnswer(c: QueuedCommand, cause: unknown): void {
     if (this.awaiting === c) this.awaiting = null
+    if (this.deferredReply?.cmd === c) this.deferredReply = null
     this.scheduler.onSettled(c) // a maintenance retry below is tracked again
     if (this.graceful) {
       // stopping: no retry, move on. In a captcha it stays due and is sent again after the solve.
@@ -611,6 +630,7 @@ export class Engine {
     this.queue.pause()
     this.queue.notifyResponse() // drop the wait on an in-flight command of the old target
     this.awaiting = null
+    this.deferredReply = null
     this.lastSent = null
     this.pauseReason = null
     this.clearNetworkTimer()

@@ -121,16 +121,29 @@ export class CommandQueue {
     this.dispatch(entry.cmd)
   }
 
-  private dispatch(cmd: QueuedCommand): void {
-    const id = ++this.flightId
-    this.inFlight = { cmd, id }
-    this.lastSendAt = Date.now()
+  /**
+   * The bot acknowledged the in-flight command and will answer later (deferred reply):
+   * wait up to `ms` from now instead of the normal response timeout.
+   */
+  extendTimeout(ms: number): void {
+    if (this.inFlight) this.armTimeout(this.inFlight.cmd, this.inFlight.id, ms)
+  }
+
+  private armTimeout(cmd: QueuedCommand, id: number, ms: number): void {
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer)
     this.timeoutTimer = setTimeout(() => {
       if (this.inFlight?.id !== id) return
       this.release()
       this.timeoutCb(cmd)
       this.pump()
-    }, this.opts.responseTimeoutMs)
+    }, ms)
+  }
+
+  private dispatch(cmd: QueuedCommand): void {
+    const id = ++this.flightId
+    this.inFlight = { cmd, id }
+    this.lastSendAt = Date.now()
+    this.armTimeout(cmd, id, this.opts.responseTimeoutMs)
 
     const fail = (err: unknown): void => {
       if (this.inFlight?.id !== id) return

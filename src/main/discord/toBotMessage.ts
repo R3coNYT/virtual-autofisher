@@ -87,6 +87,7 @@ export function componentsToEmbeds(components: ComponentLike[]): BotMessage['emb
 }
 
 const EPHEMERAL = 64
+const LOADING = 128 // deferred interaction reply, edited later into the real one
 
 function flagBits(flags: LibMessageLike['flags']): number {
   return typeof flags === 'number' ? flags : (flags?.bitfield ?? 0)
@@ -137,6 +138,7 @@ export function toBotMessage(msg: LibMessageLike, selfId: string, isEdit = false
       footer: e.footer?.text ?? undefined
     })),
     ephemeral,
+    loading: (flagBits(msg.flags) & LOADING) !== 0,
     isEdit
   }
   if (msg.components?.length) out.embeds.push(...componentsToEmbeds(msg.components))

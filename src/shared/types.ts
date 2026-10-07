@@ -45,6 +45,8 @@ export type BotMessage = {
     footer?: string
   }[]
   ephemeral: boolean
+  /** Discord "is thinking…" placeholder (flag LOADING): the real reply comes as an edit of it. */
+  loading?: boolean
   isEdit: boolean
   interactionUserId?: string
 }

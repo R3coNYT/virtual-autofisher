@@ -10,6 +10,9 @@ type Info = Pick<EngineInfo, 'captchaImageUrl' | 'captchaText' | 'captchaSolved'
 
 export const CAPTCHA_SOLVED_TEXT = 'Captcha solved — resuming in a few seconds…'
 
+/** Virtual Fisher's follow-up to any command sent while a captcha is pending. */
+const REMINDER = /solve the captcha posted above/i
+
 export type CaptchaDeps = {
   queue: CommandQueue
   scheduler: Scheduler
@@ -108,7 +111,9 @@ export class CaptchaFlow {
       this.from = st
       this.d.gameState.apply(ev) // counts the captcha once, not on each update
     }
-    this.info = { captchaImageUrl: ev.imageUrl ?? this.info.captchaImageUrl, captchaText: ev.text }
+    // "solve the captcha posted above" reminders must not hide the actual challenge (code/image)
+    const reminder = st === 'captcha' && !ev.imageUrl && REMINDER.test(ev.text) && !!this.info.captchaText
+    if (!reminder) this.info = { captchaImageUrl: ev.imageUrl ?? this.info.captchaImageUrl, captchaText: ev.text }
     this.d.setState('captcha', { ...this.info })
   }
 
