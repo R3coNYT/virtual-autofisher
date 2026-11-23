@@ -8,6 +8,8 @@ pub mod client;
 pub mod gateway;
 pub mod permissions;
 pub mod rest;
+#[cfg(test)]
+pub mod fake;
 
 /// Virtual Fisher's bot/application id.
 pub const VIRTUAL_FISHER_ID: &str = "574652751745777665";

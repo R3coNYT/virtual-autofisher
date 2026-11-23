@@ -2,22 +2,18 @@
   "name": "virtual-autofisher",
   "version": "1.0.4",
   "description": "Virtual AutoFisher",
-  "main": "./out/main/index.js",
   "private": true,
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build:win": "electron-vite build && electron-builder --win",
     "vite:dev": "vite",
-    "vite:build": "vite build",
-    "electron:dev": "electron-vite dev"
+    "vite:build": "vite build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",
     "autoprefixer": "^10.6.1",
-    "discord.js-selfbot-v13": "^3.7.1",
     "lucide-react": "^1.52.0",
     "postcss": "^8.5.29",
     "react": "^18.3.1",
@@ -31,9 +27,6 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^44.5.1",
-    "electron-builder": "^26.15.3",
-    "electron-vite": "^5.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
     "vitest": "^5.0.3"

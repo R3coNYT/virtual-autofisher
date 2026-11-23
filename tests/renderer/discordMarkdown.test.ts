@@ -1,38 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { parseDiscordMarkdown } from '../../src/renderer/discordMarkdown'
-import { rawText } from '../../src/main/parser/text'
-import { parseMessage } from '../../src/main/parser'
-import type { BotMessage } from '../../src/shared/types'
 
-// The Virtual Fisher text captcha, as converted by componentsToEmbeds (title = bold first line).
-const CAPTCHA: BotMessage = {
-  id: '1',
-  channelId: 'c1',
-  content: '',
-  ephemeral: false,
-  isEdit: false,
-  embeds: [
-    {
-      title: 'Player\\_One <:crown:123>',
-      description:
-        '### Anti-bot\n/verify <result>\nCode: **7CXG**\n\nPlease use **/verify** `7CXG` to continue playing.\n-# All captchas are case sensitive.',
-      fields: []
-    }
-  ]
-}
+// The Virtual Fisher text captcha as the backend parser hands it over (raw Discord markdown: bold
+// title line, then the description; the Rust parser tests check that the captcha event carries it).
+const CAPTCHA_TEXT =
+  '**Player\\_One <:crown:123>**\n### Anti-bot\n/verify <result>\nCode: **7CXG**\n\n' +
+  'Please use **/verify** `7CXG` to continue playing.\n-# All captchas are case sensitive.'
 
 describe('captcha markdown', () => {
-  it('the captcha event carries the raw Discord markdown for display', () => {
-    const e = parseMessage(CAPTCHA)
-    expect(e.kind).toBe('captcha')
-    if (e.kind !== 'captcha') return
-    expect(e.text).toBe(rawText(CAPTCHA))
-    expect(e.text).toContain('Code: **7CXG**')
-    expect(e.text.startsWith('**Player\\_One <:crown:123>**')).toBe(true)
-  })
-
   it('parses headings, subtext, bold, inline code, escapes and custom emoji', () => {
-    const blocks = parseDiscordMarkdown(rawText(CAPTCHA))
+    const blocks = parseDiscordMarkdown(CAPTCHA_TEXT)
     expect(blocks[0]).toEqual({
       kind: 'p',
       spans: [{ kind: 'bold', text: 'Player_One ' }, { kind: 'emoji', id: '123', name: 'crown', animated: false }]

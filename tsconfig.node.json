@@ -7,9 +7,32 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "baseUrl": ".",
-    "paths": { "@shared/*": ["src/shared/*"] }
+    "paths": {
+      "@shared/*": [
+        "src/shared/*"
+      ]
+    },
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
-  "include": ["electron.vite.config.ts", "vitest.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/renderer/applyGamePatch.ts", "src/renderer/resolveFirstScreen.ts", "src/renderer/logBuffer.ts", "src/renderer/format.ts", "src/renderer/settingsBounds.ts", "src/renderer/discordMarkdown.ts", "tests/**/*"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "src/shared/**/*",
+    "src/renderer/applyGamePatch.ts",
+    "src/renderer/resolveFirstScreen.ts",
+    "src/renderer/logBuffer.ts",
+    "src/renderer/format.ts",
+    "src/renderer/settingsBounds.ts",
+    "src/renderer/discordMarkdown.ts",
+    "tests/**/*",
+    "src/renderer/api.ts",
+    "src/renderer/env.d.ts"
+  ]
 }

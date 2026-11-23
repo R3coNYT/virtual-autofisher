@@ -43,6 +43,7 @@ const GRACEFUL_MAX_MS: i64 = 25_000;
 
 pub const FETCH_COMMANDS_FAILED: &str = "Unable to fetch the Virtual Fisher commands";
 pub const NO_CHANNEL: &str = "Choose a channel first";
+pub const LOAD_COMMANDS_FAILED: &str = "Unable to load the Virtual Fisher commands";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
@@ -642,7 +643,7 @@ impl EngineCore {
                 if is_idle(self.current) && same_target {
                     self.set_commands(vec![], None);
                 }
-                self.toast_error(FETCH_COMMANDS_FAILED);
+                self.toast_error(LOAD_COMMANDS_FAILED);
             }
             Ok(cmds) => {
                 // a session started, or the target moved to another guild, meanwhile: theirs wins
@@ -808,7 +809,7 @@ impl EngineCore {
 
     fn route(&mut self, ev: &GameEvent, reply_to: Option<&QueuedCommand>) {
         #[cfg(test)]
-        if self.panic_on_route {
+        if std::mem::take(&mut self.panic_on_route) {
             panic!("boom");
         }
         if self.captcha_handle(ev) {
