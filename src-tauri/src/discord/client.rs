@@ -72,6 +72,8 @@ struct Session {
     /// Our role ids per guild, when READY told us.
     my_roles: HashMap<String, Vec<String>>,
     stop: watch::Sender<bool>,
+    /// Payloads to send on the Gateway (op 37 subscriptions).
+    gw_out: mpsc::UnboundedSender<Value>,
 }
 
 #[derive(Default)]
@@ -156,6 +158,10 @@ impl LiveClient {
         let mut inner = self.lock();
         if let Some(s) = inner.session.as_mut() {
             let (guilds, roles) = parse_ready(d, &s.user.id);
+            let ids: Vec<String> = d["guilds"].as_array().into_iter().flatten().filter_map(|g| g["id"].as_str().map(str::to_string)).collect();
+            for payload in subscriptions_bulk(&ids) {
+                let _ = s.gw_out.send(payload);
+            }
             s.guilds = guilds;
             s.my_roles = roles;
             if let Some(sid) = d["session_id"].as_str() {
@@ -186,6 +192,9 @@ impl LiveClient {
                 if let (Some(s), Some(id)) = (inner.session.as_mut(), d["id"].as_str()) {
                     if let Some(roles) = own_roles(&d, &s.user.id) {
                         s.my_roles.insert(id.into(), roles);
+                    }
+                    for payload in subscriptions_bulk(&[id.to_string()]) {
+                        let _ = s.gw_out.send(payload);
                     }
                     s.guilds.insert(id.into(), d);
                 }
@@ -314,6 +323,22 @@ pub fn commands_from_index(index: &Value) -> Vec<SlashCommandInfo> {
         .collect()
 }
 
+/// Op 37 GUILD_SUBSCRIPTIONS_BULK payloads, as the library sends them after READY (split in two
+/// above 80 guilds) and on GUILD_CREATE: without them Discord does not deliver guild messages.
+pub fn subscriptions_bulk(guild_ids: &[String]) -> Vec<Value> {
+    let sub = || json!({ "typing": true, "threads": true, "activities": true, "member_updates": true,
+                          "thread_member_lists": [], "members": [], "channels": {} });
+    let build = |ids: &[String]| {
+        let subs: serde_json::Map<String, Value> = ids.iter().map(|id| (id.clone(), sub())).collect();
+        json!({ "op": 37, "d": { "subscriptions": subs } })
+    };
+    match guild_ids.len() {
+        0 => vec![],
+        n if n > 80 => vec![build(&guild_ids[..n / 2]), build(&guild_ids[n / 2..])],
+        _ => vec![build(guild_ids)],
+    }
+}
+
 /// Whether the index lists Virtual Fisher.
 pub fn index_has_vf(index: &Value) -> bool {
     index["applications"]
@@ -326,9 +351,10 @@ impl DiscordClient for LiveClient {
     async fn login(&self, token: &str) -> std::result::Result<SelfUser, LoginError> {
         let gen = { self.lock().generation + 1 };
         let (tx, rx) = mpsc::unbounded_channel();
+        let (gw_out, gw_out_rx) = mpsc::unbounded_channel();
         let (stop_tx, stop_rx) = watch::channel(false);
         let (ready_tx, ready_rx) = oneshot::channel();
-        tokio::spawn(gateway::run(self.cfg.url.clone(), token.to_string(), tx, stop_rx));
+        tokio::spawn(gateway::run(self.cfg.url.clone(), token.to_string(), tx, gw_out_rx, stop_rx));
         self.spawn_pump(gen, rx, ready_tx);
         let ready = match tokio::time::timeout(LOGIN_TIMEOUT, ready_rx).await {
             Ok(Ok(Ok(d))) => d,
@@ -348,6 +374,10 @@ impl DiscordClient for LiveClient {
         .map_err(|_| LoginError::Network)?;
         let user = self_user(&ready["user"]);
         let (guilds, my_roles) = parse_ready(&ready, &user.id);
+        let ids: Vec<String> = ready["guilds"].as_array().into_iter().flatten().filter_map(|g| g["id"].as_str().map(str::to_string)).collect();
+        for payload in subscriptions_bulk(&ids) {
+            let _ = gw_out.send(payload);
+        }
         let session = Session {
             user: user.clone(),
             session_id: ready["session_id"].as_str().unwrap_or("").into(),
@@ -355,6 +385,7 @@ impl DiscordClient for LiveClient {
             guilds,
             my_roles,
             stop: stop_tx,
+            gw_out,
         };
         // swap only now: a failed login never drops the live session
         let mut inner = self.lock();
@@ -540,6 +571,11 @@ mod tests {
 
     /// Logs a LiveClient in against a mock Gateway (returns the client and the Gateway's outbound sender).
     async fn logged_in(api: &MockServer) -> (LiveClient, mpsc::UnboundedSender<Out>) {
+        let (c, out, _inbound) = logged_in_with_inbound(api).await;
+        (c, out)
+    }
+
+    async fn logged_in_with_inbound(api: &MockServer) -> (LiveClient, mpsc::UnboundedSender<Out>, mpsc::UnboundedReceiver<Value>) {
         let (url, mut conns) = serve().await;
         let tmp = tempfile::tempdir().unwrap();
         let client = LiveClient::new(GatewayConfig { url, api_base: api.uri() }, Arc::new(Logger::new(tmp.keep())));
@@ -551,7 +587,7 @@ mod tests {
         out.send(Out::Json(json!({ "op": 0, "s": 1, "t": "READY", "d": ready_payload() }))).ok();
         let user = login.await.unwrap().unwrap();
         assert_eq!(user.username, "player");
-        (client, out)
+        (client, out, inbound)
     }
 
     #[tokio::test]
@@ -630,6 +666,31 @@ mod tests {
         let tmp2 = tempfile::tempdir().unwrap();
         let offline = LiveClient::new(GatewayConfig { url: "ws://127.0.0.1:1".into(), api_base: "http://127.0.0.1:1".into() }, Arc::new(Logger::new(tmp2.keep())));
         assert_eq!(offline.login("t").await, Err(LoginError::Network));
+    }
+
+    #[tokio::test]
+    async fn subscribes_to_guilds_after_ready_like_the_library() {
+        let api = MockServer::start().await;
+        let (_client, out, mut inbound) = logged_in_with_inbound(&api).await;
+        let sub = next(&mut inbound).await;
+        assert_eq!(sub["op"], 37);
+        assert_eq!(sub["d"]["subscriptions"]["900"]["typing"], true);
+        assert_eq!(sub["d"]["subscriptions"]["900"]["channels"], json!({}));
+        out.send(Out::Json(json!({ "op": 0, "s": 3, "t": "GUILD_CREATE", "d": { "id": "901", "name": "New", "channels": [], "roles": [] } }))).ok();
+        let sub2 = next(&mut inbound).await;
+        assert_eq!(sub2["op"], 37);
+        assert!(sub2["d"]["subscriptions"].get("901").is_some());
+    }
+
+    #[test]
+    fn subscriptions_split_above_80_guilds() {
+        let ids: Vec<String> = (0..81).map(|i| i.to_string()).collect();
+        let msgs = subscriptions_bulk(&ids);
+        assert_eq!(msgs.len(), 2);
+        let n = |m: &Value| m["d"]["subscriptions"].as_object().unwrap().len();
+        assert_eq!(n(&msgs[0]) + n(&msgs[1]), 81);
+        assert_eq!(subscriptions_bulk(&ids[..77]).len(), 1);
+        assert!(subscriptions_bulk(&[]).is_empty());
     }
 
     #[test]

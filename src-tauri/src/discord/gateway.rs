@@ -41,8 +41,15 @@ struct SessionState {
     disconnected: bool,
 }
 
-/// Runs the Gateway session. Events go to `tx`; set `stop` to true to close it.
-pub async fn run(url: String, token: String, tx: mpsc::UnboundedSender<GatewayEvent>, mut stop: watch::Receiver<bool>) {
+/// Runs the Gateway session. Events go to `tx`; payloads received on `outbound` are sent as is
+/// (e.g. op 37 guild subscriptions); set `stop` to true to close it.
+pub async fn run(
+    url: String,
+    token: String,
+    tx: mpsc::UnboundedSender<GatewayEvent>,
+    mut outbound: mpsc::UnboundedReceiver<Value>,
+    mut stop: watch::Receiver<bool>,
+) {
     let mut st = SessionState::default();
     let mut failures: u32 = 0;
     loop {
@@ -53,7 +60,7 @@ pub async fn run(url: String, token: String, tx: mpsc::UnboundedSender<GatewayEv
             (Some(_), Some(r)) => format!("{}/?v=9&encoding=json", r.trim_end_matches('/')),
             _ => url.clone(),
         };
-        let exit = session_once(&target, &token, &mut st, &tx, &mut stop).await;
+        let exit = session_once(&target, &token, &mut st, &tx, &mut outbound, &mut stop).await;
         match exit {
             Exit::Stopped => return,
             Exit::Fatal(f) => {
@@ -92,6 +99,7 @@ async fn session_once(
     token: &str,
     st: &mut SessionState,
     tx: &mpsc::UnboundedSender<GatewayEvent>,
+    outbound: &mut mpsc::UnboundedReceiver<Value>,
     stop: &mut watch::Receiver<bool>,
 ) -> Exit {
     let Ok((ws, _)) = tokio_tungstenite::connect_async(url).await else {
@@ -114,6 +122,11 @@ async fn session_once(
             _ = stop.changed() => {
                 let _ = sink.close().await;
                 return Exit::Stopped;
+            }
+            Some(payload) = outbound.recv() => {
+                if sink.send(Message::text(payload.to_string())).await.is_err() {
+                    return Exit::Reconnect { resume: true };
+                }
             }
             _ = tick => {
                 if !acked {
@@ -285,7 +298,8 @@ mod tests {
         let (url, mut conns) = serve().await;
         let (tx, mut events) = mpsc::unbounded_channel();
         let (_stop_tx, stop) = watch::channel(false);
-        tokio::spawn(run(url.clone(), "tok".into(), tx, stop));
+        let (_out_tx, out_rx) = mpsc::unbounded_channel();
+        tokio::spawn(run(url.clone(), "tok".into(), tx, out_rx, stop));
         let (mut inbound, out) = next(&mut conns).await;
         out.send(hello()).ok();
         let identify = next(&mut inbound).await;
@@ -303,7 +317,8 @@ mod tests {
         let (url, mut conns) = serve().await;
         let (tx, mut events) = mpsc::unbounded_channel();
         let (_stop_tx, stop) = watch::channel(false);
-        tokio::spawn(run(url.clone(), "tok".into(), tx, stop));
+        let (_out_tx, out_rx) = mpsc::unbounded_channel();
+        tokio::spawn(run(url.clone(), "tok".into(), tx, out_rx, stop));
         let (mut inbound, out) = next(&mut conns).await;
         out.send(hello()).ok();
         next(&mut inbound).await; // identify
@@ -328,7 +343,8 @@ mod tests {
         let (url, mut conns) = serve().await;
         let (tx, mut events) = mpsc::unbounded_channel();
         let (_stop_tx, stop) = watch::channel(false);
-        tokio::spawn(run(url.clone(), "tok".into(), tx, stop));
+        let (_out_tx, out_rx) = mpsc::unbounded_channel();
+        tokio::spawn(run(url.clone(), "tok".into(), tx, out_rx, stop));
         let (mut inbound, out) = next(&mut conns).await;
         out.send(hello()).ok();
         next(&mut inbound).await;
@@ -349,7 +365,8 @@ mod tests {
         let (url, mut conns) = serve().await;
         let (tx, mut events) = mpsc::unbounded_channel();
         let (_s, stop) = watch::channel(false);
-        tokio::spawn(run(url, "bad".into(), tx, stop));
+        let (_o1, out_rx) = mpsc::unbounded_channel();
+        tokio::spawn(run(url, "bad".into(), tx, out_rx, stop));
         let (mut inbound, out) = next(&mut conns).await;
         out.send(hello()).ok();
         next(&mut inbound).await;
@@ -358,7 +375,8 @@ mod tests {
 
         let (tx2, mut events2) = mpsc::unbounded_channel();
         let (_s2, stop2) = watch::channel(false);
-        tokio::spawn(run("ws://127.0.0.1:1".into(), "t".into(), tx2, stop2));
+        let (_o2, out_rx2) = mpsc::unbounded_channel();
+        tokio::spawn(run("ws://127.0.0.1:1".into(), "t".into(), tx2, out_rx2, stop2));
         assert_eq!(next(&mut events2).await, GatewayEvent::Fatal(Fatal::Network));
     }
 }

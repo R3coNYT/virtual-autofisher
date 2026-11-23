@@ -44,6 +44,7 @@ async fn main() {
         }
         println!("\n/{command} sent, waiting for the reply (30 s)...");
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        let mut got_reply = false;
         while let Ok(Ok(ev)) = tokio::time::timeout_at(deadline, events.recv()).await {
             if let DiscordEvent::BotMessage(m) = ev {
                 println!("\n--- reply (edit: {}, thinking: {}) ---", m.is_edit, m.loading);
@@ -52,8 +53,12 @@ async fn main() {
                     if let Some(d) = &e.description { println!("{d}"); }
                     if let Some(img) = &e.image_url { println!("[image] {img}"); }
                 }
-                if !m.loading { break; }
+                if !m.loading { got_reply = true; break; }
             }
+        }
+        if !got_reply {
+            println!("
+No reply received in 30 s. Did /{command} appear in the channel on Discord?");
         }
     } else if let Some(guild) = args.first() {
         match client.list_channels(guild).await {
