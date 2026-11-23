@@ -10,25 +10,15 @@ pub mod model;
 pub mod parser;
 pub mod paths;
 pub mod persist;
+pub mod shell;
 
 use config::ConfigStore;
 use discord::{DiscordClient, GatewayConfig, LiveClient};
 use engine::core::EngineCore;
 use ipc::commands::{self, AppCore, AppDeps};
-use ipc::events::{tauri_event_name, Emitter};
 use logger::Logger;
 use paths::{data_dir, Paths};
 use std::sync::Arc;
-
-/// Backend events to the webview (v1 channel names, `.` mapped to `:`).
-struct TauriEmitter(tauri::AppHandle);
-
-impl Emitter for TauriEmitter {
-    fn emit(&self, channel: &str, payload: serde_json::Value) {
-        use tauri::Emitter as _;
-        let _ = self.0.emit(&tauri_event_name(channel), payload);
-    }
-}
 
 fn open_folder(path: &std::path::Path) -> anyhow::Result<()> {
     std::process::Command::new("explorer").arg(path).spawn()?;
@@ -48,7 +38,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         paths,
         config,
         client,
-        emitter: Arc::new(TauriEmitter(app.handle().clone())),
+        emitter: Arc::new(shell::TauriEmitter::new(app.handle().clone())),
         logger,
         opener: Box::new(open_folder),
         core: EngineCore::new(rand::random()),
@@ -57,12 +47,28 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // the connection status is buffered (auth_status), so a renderer that loads later still sees it
     tauri::async_runtime::spawn(core.auto_login());
     app.manage(core);
+    shell::create_tray(app.handle())?;
     Ok(())
 }
 
 pub fn run() {
+    use std::sync::atomic::Ordering;
+    use tauri::{Manager as _, RunEvent, WindowEvent};
     tauri::Builder::default()
+        // first plugin: a second launch only focuses the running window
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| shell::show_main(app)))
+        .plugin(tauri_plugin_notification::init())
         .setup(setup)
+        .on_window_event(|w, ev| {
+            // close = hide to the tray (unless disabled); a real quit goes through the tray menu
+            if let WindowEvent::CloseRequested { api, .. } = ev {
+                let to_tray = w.app_handle().try_state::<Arc<AppCore>>().is_some_and(|c| c.config_get().ui.close_to_tray);
+                if to_tray && !shell::QUITTING.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = w.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::auth_set_token,
             commands::auth_logout,
@@ -83,6 +89,15 @@ pub fn run() {
             commands::config_update,
             commands::app_open_data_dir,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Virtual AutoFisher");
+        .build(tauri::generate_context!())
+        .expect("error while building Virtual AutoFisher")
+        .run(|app, ev| {
+            // every exit (last window closed, tray Quit) goes through the quit path once
+            if let RunEvent::ExitRequested { api, .. } = ev {
+                if !shell::QUITTING.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                    shell::quit(app);
+                }
+            }
+        });
 }

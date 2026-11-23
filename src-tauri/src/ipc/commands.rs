@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 const RETRY_DELAYS_MS: [u64; 3] = [30_000, 60_000, 120_000];
@@ -75,6 +75,8 @@ pub struct AppCore {
     auth: Mutex<Auth>,
     /// Bumped by every manual setToken: stale auto-login results are ignored.
     login_gen: AtomicU64,
+    /// Waits until the relay has handled every effect queued so far (quit path: session file written).
+    relay_barrier: mpsc::UnboundedSender<oneshot::Sender<()>>,
 }
 
 impl AppCore {
@@ -83,6 +85,7 @@ impl AppCore {
         let store = Arc::new(Mutex::new(StateStore::new(d.paths.root.clone(), d.logger.clone())));
         let (out_tx, out_rx) = mpsc::channel(1024);
         let persist = StatePersistence::new(store.clone(), d.logger.clone());
+        let (barrier_tx, barrier_rx) = mpsc::unbounded_channel();
         let engine = spawn_engine_with(d.core, d.client.clone(), d.config.subscribe(), out_tx, Some(persist));
         let app = Arc::new(Self {
             config: Mutex::new(d.config),
@@ -95,9 +98,10 @@ impl AppCore {
             opener: d.opener,
             auth: Mutex::new(Auth::default()),
             login_gen: AtomicU64::new(0),
+            relay_barrier: barrier_tx,
         });
         app.apply_capture();
-        tokio::spawn(relay_loop(app.clone(), out_rx));
+        tokio::spawn(relay_loop(app.clone(), out_rx, barrier_rx));
         app
     }
 
@@ -348,8 +352,21 @@ impl AppCore {
     pub async fn shutdown(&self) {
         self.dispose();
         self.engine.send(EngineInput::Stop { graceful: false });
-        self.engine.flush().await;
+        self.engine.flush().await; // the actor has queued the session end before replying
+        let (tx, rx) = oneshot::channel();
+        if self.relay_barrier.send(tx).is_ok() {
+            let _ = rx.await;
+        }
         self.client.logout().await;
+    }
+
+    /// Toast shown by the renderer (tray actions).
+    pub fn toast(&self, t: &crate::model::Toast) {
+        self.emitter.emit("toast", serde_json::to_value(t).unwrap_or(Value::Null));
+    }
+
+    pub fn log_warn(&self, msg: &str) {
+        self.logger.warn(msg);
     }
 
     pub fn engine(&self) -> &EngineHandle {
@@ -357,12 +374,17 @@ impl AppCore {
     }
 }
 
-async fn relay_loop(app: Arc<AppCore>, mut rx: mpsc::Receiver<crate::engine::core::Effect>) {
+async fn relay_loop(
+    app: Arc<AppCore>,
+    mut rx: mpsc::Receiver<crate::engine::core::Effect>,
+    mut barrier: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
+) {
     let mut relay = Relay::new(app.emitter.clone(), app.logger.clone(), app.paths.sessions.clone());
     let mut events = app.client.subscribe();
     let mut events_open = true;
     loop {
         tokio::select! {
+            biased;
             e = rx.recv() => match e {
                 Some(e) => relay.on_effect(e),
                 None => return,
@@ -373,6 +395,12 @@ async fn relay_loop(app: Arc<AppCore>, mut rx: mpsc::Receiver<crate::engine::cor
                 Err(RecvError::Closed) => events_open = false,
                 _ => {}
             },
+            Some(reply) = barrier.recv() => {
+                while let Ok(e) = rx.try_recv() {
+                    relay.on_effect(e);
+                }
+                let _ = reply.send(());
+            }
         }
     }
 }

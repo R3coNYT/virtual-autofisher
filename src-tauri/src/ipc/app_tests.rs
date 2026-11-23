@@ -275,6 +275,18 @@ async fn engine_stop_writes_the_session_summary_to_sessions() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn shutdown_returns_only_after_the_session_summary_is_written() {
+    let t = setup_target().await;
+    t.app.engine_start().unwrap();
+    settle().await;
+    t.client.emit_bot(fx("catch-basic"));
+    settle().await;
+    t.app.shutdown().await; // no settle: the process exits right after this on quit
+    let files = std::fs::read_dir(t.root.join("sessions")).map(|d| d.count()).unwrap_or(0);
+    assert_eq!(files, 1);
+}
+
+#[tokio::test(start_paused = true)]
 async fn engine_stop_is_graceful_by_default_false_halts_at_once() {
     let t = setup_target().await;
     t.app.engine_start().unwrap();

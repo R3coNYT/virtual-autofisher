@@ -1,0 +1,171 @@
+//! Desktop shell: tray, notifications, window (port of v1 `tray.ts`, `notify.ts`, `index.ts`).
+
+pub mod notify;
+pub mod notify_events;
+pub mod tray;
+
+use crate::ipc::commands::AppCore;
+use crate::ipc::events::{tauri_event_name, Emitter};
+use crate::model::{EngineState, Toast, ToastLevel};
+use notify_events::{ShellAction, ShellWatcher};
+use serde_json::Value;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tauri::image::Image;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Manager, Wry};
+use tray::{tray_labels, TrayAction};
+
+const ICON: &[u8] = include_bytes!("../../icons/icon.png");
+const ICON_ALERT: &[u8] = include_bytes!("../../icons/icon-alert.png");
+
+/// Set once the quit path started: the window then really closes and the exit goes through.
+pub static QUITTING: AtomicBool = AtomicBool::new(false);
+
+/// Brings the main window to the front (tray, second launch).
+pub fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+fn core(app: &AppHandle) -> Option<Arc<AppCore>> {
+    app.try_state::<Arc<AppCore>>().map(|s| s.inner().clone())
+}
+
+/// Quit path (tray Quit, last window closed): halt, session file, state saved, logout, then exit.
+pub fn quit(app: &AppHandle) {
+    if QUITTING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(c) = core(&app) {
+            c.shutdown().await;
+        }
+        app.exit(0);
+    });
+}
+
+pub struct TrayHandles {
+    tray: TrayIcon,
+    toggle: MenuItem<Wry>,
+    stop: MenuItem<Wry>,
+    state: Mutex<EngineState>,
+}
+
+impl TrayHandles {
+    fn refresh(&self, state: EngineState) {
+        *self.state.lock().unwrap_or_else(|e| e.into_inner()) = state;
+        let l = tray_labels(state);
+        let _ = self.toggle.set_text(l.toggle.label);
+        let _ = self.toggle.set_enabled(l.toggle.enabled);
+        let _ = self.stop.set_text(l.stop.label);
+        let _ = self.stop.set_enabled(l.stop.enabled);
+        let _ = self.tray.set_tooltip(Some(l.tooltip));
+        if let Ok(img) = Image::from_bytes(if l.alert { ICON_ALERT } else { ICON }) {
+            let _ = self.tray.set_icon(Some(img));
+        }
+    }
+
+    fn current(&self) -> EngineState {
+        *self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+fn run_action(app: &AppHandle, action: TrayAction) {
+    let Some(c) = core(app) else { return };
+    match action {
+        TrayAction::Start => {
+            // the target is read when clicked, so a channel picked later is honoured
+            if let Err(msg) = c.engine_start() {
+                c.log_warn(&format!("tray start failed: {msg}"));
+                c.toast(&Toast { level: ToastLevel::Error, message: msg });
+            }
+        }
+        TrayAction::Pause => c.engine_pause(),
+        TrayAction::Resume => c.engine_resume(),
+        TrayAction::Stop => {
+            tauri::async_runtime::spawn(async move { c.engine_stop(Some(true)).await });
+        }
+        TrayAction::ForceStop => {
+            tauri::async_runtime::spawn(async move { c.engine_stop(Some(false)).await });
+        }
+        TrayAction::None => {}
+    }
+}
+
+pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+    let l = tray_labels(EngineState::Idle);
+    let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", l.toggle.label, l.toggle.enabled, None::<&str>)?;
+    let stop = MenuItem::with_id(app, "stop", l.stop.label, l.stop.enabled, None::<&str>)?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &toggle, &stop, &sep, &quit_item])?;
+    let tray = TrayIconBuilder::with_id("main")
+        .icon(Image::from_bytes(ICON)?)
+        .tooltip(l.tooltip)
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, ev| {
+            let state = app.try_state::<TrayHandles>().map_or(EngineState::Idle, |t| t.current());
+            let l = tray_labels(state);
+            match ev.id().as_ref() {
+                "show" => show_main(app),
+                "toggle" => run_action(app, l.toggle.action),
+                "stop" => run_action(app, l.stop.action),
+                "quit" => quit(app),
+                _ => {}
+            }
+        })
+        .on_tray_icon_event(|tray, ev| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
+                show_main(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    app.manage(TrayHandles { tray, toggle, stop, state: Mutex::new(EngineState::Idle) });
+    Ok(())
+}
+
+/// Backend events to the webview (v1 channel names, `.` mapped to `:`), also watched for the tray and
+/// the notifications. A notification failure never reaches the engine.
+pub struct TauriEmitter {
+    app: AppHandle,
+    watcher: Mutex<ShellWatcher>,
+}
+
+impl TauriEmitter {
+    pub fn new(app: AppHandle) -> Self {
+        Self { app, watcher: Mutex::new(ShellWatcher::default()) }
+    }
+
+    fn act(&self, a: ShellAction) {
+        let cfg = || core(&self.app).map(|c| c.config_get().notifications).unwrap_or_default();
+        match a {
+            ShellAction::Tray(s) => {
+                if let Some(t) = self.app.try_state::<TrayHandles>() {
+                    t.refresh(s);
+                }
+            }
+            ShellAction::Captcha => notify::notify_captcha(&self.app, &cfg()),
+            ShellAction::LevelUp(l) => notify::notify_level_up(&self.app, &cfg(), l),
+            ShellAction::RareFish(k) => notify::notify_rare_fish(&self.app, &cfg(), &k),
+        }
+    }
+}
+
+impl Emitter for TauriEmitter {
+    fn emit(&self, channel: &str, payload: Value) {
+        use tauri::Emitter as _;
+        let actions = self.watcher.lock().unwrap_or_else(|e| e.into_inner()).on_event(channel, &payload);
+        let _ = self.app.emit(&tauri_event_name(channel), payload);
+        for a in actions {
+            self.act(a);
+        }
+    }
+}
