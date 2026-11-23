@@ -5,13 +5,17 @@
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "tauri dev",
+    "build": "tauri build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build:win": "electron-vite build && electron-builder --win"
+    "build:win": "electron-vite build && electron-builder --win",
+    "vite:dev": "vite",
+    "vite:build": "vite build",
+    "electron:dev": "electron-vite dev"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.5",
     "autoprefixer": "^10.6.1",
     "discord.js-selfbot-v13": "^3.7.1",
     "lucide-react": "^1.52.0",
@@ -22,6 +26,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.6",
     "@types/node": "^26.6.4",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",

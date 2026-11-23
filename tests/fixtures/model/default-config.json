@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "target": null,
+  "fishing": {
+    "baseCooldownSec": 3.5,
+    "jitterSec": 0.8,
+    "minGapSec": 2.5
+  },
+  "sell": {
+    "enabled": true,
+    "mode": "catches",
+    "every": 25
+  },
+  "buffs": {
+    "enabled": false,
+    "lengthMin": 5
+  },
+  "boosters": {
+    "autoPersonal": false
+  },
+  "bait": {
+    "enabled": false,
+    "name": "",
+    "autoAmount": true,
+    "amount": 0
+  },
+  "profile": {
+    "refreshMin": 5
+  },
+  "daily": {
+    "enabled": true
+  },
+  "quests": {
+    "enabled": true
+  },
+  "breaks": {
+    "enabled": false,
+    "workMin": 45,
+    "workJitterMin": 10,
+    "restMin": 5,
+    "restJitterMin": 2
+  },
+  "sessionLimitH": 0,
+  "notifications": {
+    "captcha": true,
+    "sound": true,
+    "levelUp": true,
+    "rareFish": true
+  },
+  "ui": {
+    "compactLog": false,
+    "closeToTray": true
+  },
+  "capture": false
+}
