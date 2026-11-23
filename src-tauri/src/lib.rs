@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod discord;
+pub mod engine;
 pub mod dpapi;
 pub mod logger;
 pub mod model;
