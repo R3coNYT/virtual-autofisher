@@ -1,6 +1,7 @@
 //! Virtual AutoFisher backend (Tauri 2).
 
 pub mod config;
+pub mod discord;
 pub mod dpapi;
 pub mod logger;
 pub mod model;
