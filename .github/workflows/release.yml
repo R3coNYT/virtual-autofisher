@@ -1,6 +1,6 @@
 # Builds the Windows installer and publishes a GitHub release for every new app version.
 # A "new version" = the `version` in package.json has no `v<version>` release yet.
-# To ship one: bump the version (e.g. `npm version 1.0.1`), commit, push to main.
+# To ship one: bump the version in package.json and src-tauri/Cargo.toml, commit, push to main.
 name: Release
 
 on:
@@ -46,11 +46,26 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build installer
-        run: npx electron-vite build && npx electron-builder --win --publish never
+        run: npm run build
+      - name: Name the installer
+        shell: bash
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe "dist/VirtualAutoFisher-Setup-$VERSION.exe"
       - name: Create release
         shell: bash
         env:

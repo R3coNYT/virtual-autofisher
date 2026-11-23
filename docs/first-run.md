@@ -6,8 +6,8 @@ A short checklist to try Virtual AutoFisher on your own Discord account and repo
 
 Two options:
 
-- **Installer**: `VirtualAutoFisher-Setup-x.y.z.exe` from the repository's *Releases* tab (or `dist/` if you build it yourself). Windows SmartScreen will warn you ("unknown publisher", the exe is not signed): *More info* → *Run anyway*.
-- **From source** (recommended when testing, you see the logs):
+- **Installer**: `VirtualAutoFisher-Setup-x.y.z.exe` from the repository's *Releases* tab (or `src-tauri/target/release/bundle/nsis/` if you build it yourself with `npm run build`). Windows SmartScreen will warn you ("unknown publisher", the exe is not signed): *More info* → *Run anyway*.
+- **From source** (recommended when testing; needs Node.js and the Rust toolchain, see the README):
   ```bash
   npm run dev
   ```
@@ -15,7 +15,7 @@ Two options:
 ## 2. Log in
 
 1. Read the warning and tick **I understand the risks**.
-2. Paste your token (the **How do I find my token?** help is on the screen). It is encrypted by Windows and stays on your PC.
+2. Paste your token (the **How do I find my token?** help is on the screen). It is encrypted by Windows and stays on your PC. Coming from 1.x: paste it again once, the old encrypted copy cannot be read by 2.0.
 3. Your avatar and username should appear.
 
 ## 3. Pick the server and the channel

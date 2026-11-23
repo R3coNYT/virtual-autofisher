@@ -1,5 +1,5 @@
 // Generates the app icons with Node built-ins only (zlib for PNG, hand-written ICO container).
-// Usage: node scripts/make-icons.mjs   -> resources/icon.png, resources/icon-alert.png, build/icon.ico
+// Usage: node scripts/make-icons.mjs   -> src-tauri/icons/icon.png, icon-alert.png, icon.ico
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -118,12 +118,11 @@ function ico(images) {
   return Buffer.concat([head, ...images.map((im) => im.data)])
 }
 
-mkdirSync('resources', { recursive: true })
-mkdirSync('build', { recursive: true })
+mkdirSync('src-tauri/icons', { recursive: true })
 const normal = png(render(hex('#22d3ee')))
 const alert = png(render(hex('#ef4444')))
-writeFileSync('resources/icon.png', normal)
-writeFileSync('resources/icon-alert.png', alert)
+writeFileSync('src-tauri/icons/icon.png', normal)
+writeFileSync('src-tauri/icons/icon-alert.png', alert)
 const cyan = hex('#22d3ee')
-writeFileSync('build/icon.ico', ico([16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, data: png(render(cyan, size), size) }))))
+writeFileSync('src-tauri/icons/icon.ico', ico([16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, data: png(render(cyan, size), size) }))))
 console.log('icons written')

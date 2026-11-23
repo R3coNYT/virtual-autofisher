@@ -1,6 +1,6 @@
 {
   "name": "virtual-autofisher",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "Virtual AutoFisher",
   "private": true,
   "scripts": {

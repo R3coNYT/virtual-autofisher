@@ -1,6 +1,6 @@
 # Virtual AutoFisher
 
-A Windows desktop app (Electron + React) that automates the **Virtual Fisher** Discord bot with your own account: continuous fishing, selling, fish and treasure buffs, personal boosters, bait, `/daily` and quest tracking, with a live dashboard (balance, fish value, level, catches, boosts, rare fish, log).
+A Windows desktop app (Tauri 2: Rust backend, React UI) that automates the **Virtual Fisher** Discord bot with your own account: continuous fishing, selling, fish and treasure buffs, personal boosters, bait, `/daily` and quest tracking, with a live dashboard (balance, fish value, level, catches, boosts, rare fish, log).
 
 ## Warnings
 
@@ -8,21 +8,29 @@ A Windows desktop app (Electron + React) that automates the **Virtual Fisher** D
 - **Virtual Fisher forbids macros**: your progress can be reset or banned.
 - The app mimics a human pace (random delays, optional breaks), which **lowers the risk without removing it**.
 - You use this tool at your own risk. It is not affiliated with Discord or Virtual Fisher.
-- Your token is stored **encrypted** (Windows secure storage through Electron `safeStorage`), is never displayed or written to the logs, and is only sent to Discord.
+- Your token is stored **encrypted** with Windows DPAPI (tied to your Windows account), is never displayed or written to the logs, and is only sent to Discord.
 
 ## Installation
 
 ### From the installer
 
-1. Download `VirtualAutoFisher-Setup-x.y.z.exe` from the **Releases** tab of this repository (or build it with `npm run build:win`, it lands in `dist/`).
-2. Run the installer: you can pick the install folder.
+1. Download `VirtualAutoFisher-Setup-x.y.z.exe` from the **Releases** tab of this repository (or build it with `npm run build`, it lands in `src-tauri/target/release/bundle/nsis/`).
+2. Run the installer. It installs for your Windows user only, no admin rights needed. If the WebView2 runtime is missing (rare on Windows 10/11), the installer downloads it.
 3. Windows SmartScreen may warn you because the installer is not signed: "More info", then "Run anyway".
 
 To update, run the new installer over the installed version: your settings, token and saved values are kept.
 
+### Upgrading from 1.x
+
+Version 2.0 is a rewrite in Rust/Tauri: a ~3 MB installer instead of Electron's ~115 MB, and less memory used.
+
+- Close 1.x before installing 2.0 (right-click the tray icon, then **Quit**). The 2.0 installer uninstalls 1.x automatically.
+- Your settings, saved values and session history in `%APPDATA%\virtual-autofisher\` are kept.
+- **Paste your token again once**: 1.x encrypted it in Electron's format, which 2.0 cannot read. The app opens on the login screen.
+
 ### From source
 
-Requirements: Node.js 20 or newer.
+Requirements: Node.js 20 or newer, the [Rust toolchain](https://rustup.rs) (stable, MSVC) and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for Windows (Microsoft C++ Build Tools, WebView2).
 
 ```bash
 npm install
@@ -62,7 +70,7 @@ Never share this token: it gives full access to your account. The same steps are
 Virtual Fisher sometimes sends a captcha (`/verify`). When that happens:
 
 - the command queue is emptied and **no automatic command is sent anymore**;
-- a clickable Windows notification appears (with a sound if enabled), the taskbar button flashes and the tray icon turns red;
+- a Windows notification appears (with a sound if enabled), the taskbar button flashes until you open the window and the tray icon turns red;
 - a panel that cannot be dismissed shows the captcha image (if any) and the bot's message, rendered as Discord shows it. You type the answer and click **Submit** (or press Enter): that click is what sends `/verify`. **New image** asks for another image when the bot allows it. **Stop fishing** stops the engine without sending anything (e.g. a false alarm);
 - if the answer is wrong, the panel stays open with the bot's message; if it is right, fishing resumes after a random 5–15 s delay.
 
@@ -101,15 +109,17 @@ Data lives in `%APPDATA%\virtual-autofisher\`:
 
 | Command | Purpose |
 |---|---|
-| `npm run dev` | Development with hot reload |
-| `npm test` | Tests (Vitest) |
-| `npm run typecheck` | TypeScript check (main process and UI) |
-| `npm run build` | Build (`out/`) |
-| `npm run build:win` | NSIS installer in `dist/` |
-| `node scripts/make-icons.mjs` | Regenerates the icons (`resources/`, `build/icon.ico`) |
+| `npm run dev` | Development: the app with UI hot reload (the Rust side rebuilds on change) |
+| `npm test` | UI tests (Vitest) |
+| `npm run typecheck` | TypeScript check |
+| `npm run build` | Release build and NSIS installer in `src-tauri/target/release/bundle/nsis/` |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | Backend tests (engine, parser, Discord client, persistence) |
+| `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | Backend lint |
+| `node scripts/make-icons.mjs` | Regenerates the icons (`src-tauri/icons/`) |
 
 ## Troubleshooting
 
+- **Login screen after upgrading to 2.0**: expected once, paste your token again (see *Upgrading from 1.x*).
 - **Invalid token**: the token was refused or has expired (changing your Discord password revokes it). Get a new one (see above), then use Settings > Account > **Change token**, or log out and go through onboarding again.
 - **No Virtual Fisher on the server**: the bot is not on that server (or not visible), or `/fish` cannot be found. Pick a server with the Virtual Fisher badge, or invite the bot, then click **Refresh**.
 - **"Command unavailable"**: the matching command is not exposed by the bot on that server; the option is ignored. Commands are loaded when you log in or pick a channel.
@@ -124,9 +134,10 @@ Data lives in `%APPDATA%\virtual-autofisher\`:
 
 ## Releasing a new version
 
-Every push to `main` runs the GitHub Action [release.yml](.github/workflows/release.yml): if the `package.json` version has no `v<version>` release yet, it runs the type check and the tests, builds the Windows installer and creates the release with the `.exe`. Otherwise it does nothing.
+Every push to `main` runs the GitHub Action [release.yml](.github/workflows/release.yml): if the `package.json` version has no `v<version>` release yet, it runs the type check, the UI and Rust tests and clippy, builds the Windows installer and creates the release with the `.exe`. Otherwise it does nothing.
+
+Bump `version` in both `package.json` and `src-tauri/Cargo.toml`, commit, then push:
 
 ```bash
-npm version 1.0.4
 git push
 ```
