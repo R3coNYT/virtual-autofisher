@@ -152,6 +152,11 @@ async fn session_once(
                             _ => Exit::Reconnect { resume: true },
                         };
                     }
+                    Message::Binary(b) => {
+                        // not expected (compress is off): surfaced for diagnostics only
+                        let _ = tx.send(GatewayEvent::Dispatch { t: "<binary frame>".into(), d: json!(b.len()) });
+                        continue;
+                    }
                     _ => continue,
                 };
                 let Ok(p) = serde_json::from_str::<Value>(&text) else { continue };

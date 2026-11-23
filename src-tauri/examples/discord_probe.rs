@@ -4,6 +4,7 @@
 //!   cargo run --example discord_probe                          → user + servers (Virtual Fisher first)
 //!   cargo run --example discord_probe -- <guildId>             → + that server's usable channels
 //!   cargo run --example discord_probe -- --send <channelId> profile   → sends /profile, prints the reply
+//!   add --trace to print every Gateway event (type, channel, author; never content or token)
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +18,7 @@ async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let logs = std::env::temp_dir().join("vaf-probe-logs");
     let client = LiveClient::new(GatewayConfig::default(), Arc::new(Logger::new(logs)));
+    client.set_trace(args.iter().any(|a| a == "--trace"));
 
     let user = match client.login(&token).await {
         Ok(u) => u,

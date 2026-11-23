@@ -92,12 +92,22 @@ pub struct LiveClient {
     events: broadcast::Sender<DiscordEvent>,
     cfg: GatewayConfig,
     logger: Arc<Logger>,
+    /// Diagnostics: print every Gateway dispatch (type, channel, author; never content or token) to stderr.
+    trace: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl LiveClient {
     pub fn new(cfg: GatewayConfig, logger: Arc<Logger>) -> Self {
         let (events, _) = broadcast::channel(256);
-        Self { inner: Arc::new(Mutex::new(Inner::default())), events, cfg, logger }
+        Self { inner: Arc::new(Mutex::new(Inner::default())), events, cfg, logger, trace: Arc::default() }
+    }
+
+    pub fn set_trace(&self, on: bool) {
+        self.trace.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn tracing(&self) -> bool {
+        self.trace.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
@@ -148,7 +158,12 @@ impl LiveClient {
                     GatewayEvent::Reconnected => {
                         let _ = me.events.send(DiscordEvent::Reconnected);
                     }
-                    GatewayEvent::Dispatch { t, d } => me.on_dispatch(&t, d),
+                    GatewayEvent::Dispatch { t, d } => {
+                        if me.tracing() && !t.starts_with("MESSAGE_") {
+                            eprintln!("[trace] dispatch {t}");
+                        }
+                        me.on_dispatch(&t, d)
+                    }
                 }
             }
         });
@@ -178,10 +193,19 @@ impl LiveClient {
                     let Some(s) = inner.session.as_ref() else { return };
                     (s.user.id.clone(), inner.active_channel.clone(), inner.capture_dir.clone())
                 };
-                if active.as_deref() != d["channel_id"].as_str() || active.is_none() {
-                    return;
+                let in_active = active.is_some() && active.as_deref() == d["channel_id"].as_str();
+                let bm = if in_active { to_bot_message(&d, &self_id, t == "MESSAGE_UPDATE") } else { None };
+                if self.tracing() {
+                    eprintln!(
+                        "[trace] {t} channel={} author={} interaction_user={} flags={} -> {}",
+                        d["channel_id"].as_str().unwrap_or("?"),
+                        d["author"]["id"].as_str().unwrap_or("?"),
+                        d["interaction_metadata"]["user"]["id"].as_str().or_else(|| d["interaction"]["user"]["id"].as_str()).unwrap_or("-"),
+                        d["flags"],
+                        if !in_active { "other channel" } else if bm.is_some() { "ACCEPTED" } else { "rejected (not ours)" }
+                    );
                 }
-                let Some(bm) = to_bot_message(&d, &self_id, t == "MESSAGE_UPDATE") else { return };
+                let Some(bm) = bm else { return };
                 if let Some(dir) = capture {
                     self.capture(&dir, &bm, &d["components"]);
                 }
@@ -376,6 +400,9 @@ impl DiscordClient for LiveClient {
         let (guilds, my_roles) = parse_ready(&ready, &user.id);
         let ids: Vec<String> = ready["guilds"].as_array().into_iter().flatten().filter_map(|g| g["id"].as_str().map(str::to_string)).collect();
         for payload in subscriptions_bulk(&ids) {
+            if self.tracing() {
+                eprintln!("[trace] op 37 sent for {} guilds", payload["d"]["subscriptions"].as_object().map_or(0, |m| m.len()));
+            }
             let _ = gw_out.send(payload);
         }
         let session = Session {
