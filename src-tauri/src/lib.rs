@@ -5,6 +5,7 @@ pub mod discord;
 pub mod dpapi;
 pub mod logger;
 pub mod model;
+pub mod parser;
 pub mod paths;
 
 pub fn run() {
