@@ -128,9 +128,10 @@ impl LiveClient {
         tokio::spawn(async move {
             let mut ready = Some(ready);
             while let Some(ev) = rx.recv().await {
-                let current = me.lock().generation == gen || ready.is_some();
-                if !current {
-                    break; // a newer login replaced this session
+                // Stop only once replaced by a newer login or a logout. (Events right after READY arrive
+                // before login() has stored this generation: they must not end the session.)
+                if me.lock().generation > gen {
+                    break;
                 }
                 match ev {
                     GatewayEvent::Ready(d) => {
@@ -675,6 +676,32 @@ mod tests {
         out.send(msg("501", "ours")).ok();
         let ev = timeout(Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
         assert!(matches!(ev, DiscordEvent::BotMessage(m) if m.id == "ours"));
+    }
+
+    #[tokio::test]
+    async fn events_right_after_ready_do_not_stop_the_session() {
+        // READY_SUPPLEMENTAL follows READY at once, before login() has finished storing the session.
+        let (url, mut conns) = serve().await;
+        let tmp = tempfile::tempdir().unwrap();
+        let client = LiveClient::new(GatewayConfig { url, api_base: "http://127.0.0.1:1".into() }, Arc::new(Logger::new(tmp.keep())));
+        let mut rx = client.subscribe();
+        let c2 = client.clone();
+        let login = tokio::spawn(async move { c2.login("tok").await });
+        let (mut inbound, out) = next(&mut conns).await;
+        out.send(Out::Json(json!({ "op": 10, "d": { "heartbeat_interval": 45000 } }))).ok();
+        next(&mut inbound).await;
+        out.send(Out::Json(json!({ "op": 0, "s": 1, "t": "READY", "d": ready_payload() }))).ok();
+        for s in 2..40 {
+            out.send(Out::Json(json!({ "op": 0, "s": s, "t": "READY_SUPPLEMENTAL", "d": {} }))).ok();
+        }
+        login.await.unwrap().unwrap();
+        client.set_active_channel(Some("501".into()));
+        out.send(Out::Json(json!({ "op": 0, "s": 50, "t": "MESSAGE_CREATE", "d": {
+            "id": "late", "channel_id": "501", "content": "", "author": { "id": VIRTUAL_FISHER_ID },
+            "interaction_metadata": { "user": { "id": "111" } }, "embeds": [], "flags": 0
+        }}))).ok();
+        let ev = timeout(Duration::from_secs(5), rx.recv()).await.expect("no event: the pump stopped").unwrap();
+        assert!(matches!(ev, DiscordEvent::BotMessage(m) if m.id == "late"));
     }
 
     #[tokio::test]
