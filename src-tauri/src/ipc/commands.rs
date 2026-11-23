@@ -235,6 +235,7 @@ impl AppCore {
                         again.auto_login().await;
                     }));
                 }
+                Err(LoginError::Superseded) => {} // a newer login or a logout owns the state now
                 Err(_) => {
                     lock(&me.auth).user = None;
                     lock(&me.config).clear_token();
@@ -360,6 +361,17 @@ impl AppCore {
         self.client.logout().await;
     }
 
+    /// Discord rejected the token mid-session: halt, forget the token, show the login screen.
+    fn token_revoked(&self) {
+        self.logger.warn("Discord rejected the token: logged out");
+        self.cancel_retry();
+        self.engine.send(EngineInput::Stop { graceful: false });
+        self.engine.send(EngineInput::Detach);
+        lock(&self.config).clear_token();
+        lock(&self.auth).user = None;
+        self.set_connection(ConnectionStatus::InvalidToken, None);
+    }
+
     /// Toast shown by the renderer (tray actions).
     pub fn toast(&self, t: &crate::model::Toast) {
         self.emitter.emit("toast", serde_json::to_value(t).unwrap_or(Value::Null));
@@ -392,6 +404,7 @@ async fn relay_loop(
             ev = events.recv(), if events_open => match ev {
                 Ok(DiscordEvent::Disconnected) => app.set_connection(ConnectionStatus::Disconnected, None),
                 Ok(DiscordEvent::Reconnected) => app.set_connection(ConnectionStatus::Connected, None),
+                Ok(DiscordEvent::InvalidToken) => app.token_revoked(),
                 Err(RecvError::Closed) => events_open = false,
                 _ => {}
             },

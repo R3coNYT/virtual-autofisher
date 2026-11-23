@@ -796,7 +796,10 @@ impl EngineCore {
         if !m.is_edit {
             self.failures = 0;
         }
-        self.route(&ev, reply_to.as_ref());
+        // Guarded on its own (v1 `guard`): a panic pauses the engine, the command is still released.
+        if catch_unwind(AssertUnwindSafe(|| self.route(&ev, reply_to.as_ref()))).is_err() {
+            self.fail("panic");
+        }
         // Settled after routing: a captcha replying to it has already scheduled its re-request.
         if let Some(r) = &reply_to {
             self.scheduler.on_settled(r);

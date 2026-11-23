@@ -614,6 +614,11 @@ fn exceptions_in_handlers_pause_the_engine_instead_of_throwing() {
     assert_eq!(s.state(), S::Paused);
     assert_eq!(reason(&s).as_deref(), Some("exception"));
     assert!(!s.logs(LogLevel::Error).is_empty());
+    // the answered command was released: Resume fishes again without waiting for its timeout
+    let sent = s.sent.len();
+    s.input(EngineInput::Resume);
+    s.advance(3100);
+    assert!(s.sent.len() > sent);
 }
 
 #[test]

@@ -39,6 +39,20 @@ struct SessionState {
     seq: Option<u64>,
     ready_once: bool,
     disconnected: bool,
+    /// Reached READY or RESUMED since the last reconnect: the backoff starts over.
+    healthy: bool,
+}
+
+const BACKOFF_SECS: [u64; 5] = [1, 2, 5, 10, 30];
+
+/// Delay before the next reconnect. `failures` counts reconnects in a row; a connection that reached
+/// READY/RESUMED in between resets it (else, after a few drops hours apart, every retry waits 30 s).
+fn next_backoff(failures: &mut u32, healthy: bool) -> u64 {
+    if healthy {
+        *failures = 0;
+    }
+    *failures += 1;
+    BACKOFF_SECS[(*failures as usize - 1).min(BACKOFF_SECS.len() - 1)]
 }
 
 /// Runs the Gateway session. Events go to `tx`; payloads received on `outbound` are sent as is
@@ -80,16 +94,12 @@ pub async fn run(
                     st.disconnected = true;
                     let _ = tx.send(GatewayEvent::Disconnected);
                 }
-                failures += 1;
-                let backoff = [1u64, 2, 5, 10, 30][(failures as usize - 1).min(4)];
+                let backoff = next_backoff(&mut failures, std::mem::take(&mut st.healthy));
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_secs(backoff)) => {}
                     _ = stop.changed() => return,
                 }
             }
-        }
-        if st.ready_once && !st.disconnected {
-            failures = 0;
         }
     }
 }
@@ -202,12 +212,14 @@ async fn session_once(
                                 let was_down = st.disconnected;
                                 st.disconnected = false;
                                 st.ready_once = true;
+                                st.healthy = true;
                                 let _ = tx.send(GatewayEvent::Ready(d));
                                 if was_down {
                                     let _ = tx.send(GatewayEvent::Reconnected);
                                 }
                             }
                             "RESUMED" => {
+                                st.healthy = true;
                                 if st.disconnected {
                                     st.disconnected = false;
                                     let _ = tx.send(GatewayEvent::Reconnected);
@@ -292,6 +304,15 @@ mod tests {
     fn hello() -> Out {
         Out::Json(json!({ "op": 10, "d": { "heartbeat_interval": 45000 } }))
     }
+    #[test]
+    fn backoff_grows_while_failing_and_restarts_after_a_good_connection() {
+        let mut f = 0;
+        let seq: Vec<u64> = (0..6).map(|_| next_backoff(&mut f, false)).collect();
+        assert_eq!(seq, [1, 2, 5, 10, 30, 30]);
+        assert_eq!(next_backoff(&mut f, true), 1, "resumed in between: back to the shortest delay");
+        assert_eq!(next_backoff(&mut f, false), 2);
+    }
+
     fn ready(url: &str) -> Out {
         Out::Json(json!({ "op": 0, "s": 1, "t": "READY", "d": {
             "session_id": "sess1", "resume_gateway_url": url, "user": { "id": "111", "username": "me" }, "guilds": []

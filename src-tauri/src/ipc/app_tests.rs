@@ -275,6 +275,21 @@ async fn engine_stop_writes_the_session_summary_to_sessions() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn token_revoked_mid_session_stops_fishing_clears_the_token_and_reports_it() {
+    let t = setup_with(Opts { token: true, target: true, ..Default::default() }).await;
+    t.app.auto_login().await;
+    t.app.engine_start().unwrap();
+    settle().await;
+    t.client.emit(DiscordEvent::InvalidToken);
+    settle().await;
+    assert_eq!(t.config().token(), None);
+    assert_eq!(t.statuses().last().unwrap(), &json!({ "status": "invalidToken" }));
+    let st = serde_json::to_value(t.app.auth_status()).unwrap();
+    assert_eq!((st["user"].clone(), st["hasToken"].clone()), (Value::Null, json!(false)));
+    assert_eq!(t.app.engine_status().await.unwrap().state, crate::model::EngineState::Idle);
+}
+
+#[tokio::test(start_paused = true)]
 async fn shutdown_returns_only_after_the_session_summary_is_written() {
     let t = setup_target().await;
     t.app.engine_start().unwrap();

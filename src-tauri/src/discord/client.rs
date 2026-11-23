@@ -26,6 +26,8 @@ pub enum DiscordEvent {
     Disconnected,
     Reconnected,
     RateLimited(u64),
+    /// Discord rejected the token after login (revoked, e.g. password changed): the session is gone.
+    InvalidToken,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -34,6 +36,9 @@ pub enum LoginError {
     InvalidToken,
     #[error("Unable to connect to Discord")]
     Network,
+    /// A newer login (or a logout) started meanwhile: this one was dropped.
+    #[error("Replaced by a newer login")]
+    Superseded,
 }
 
 #[async_trait]
@@ -83,7 +88,18 @@ struct Inner {
     vf: HashMap<String, bool>,
     commands: HashMap<String, Vec<SlashCommandInfo>>,
     capture_dir: Option<PathBuf>,
+    /// Id of the live session (or of the last logout); pumps of older ids stop.
     generation: u64,
+    /// Last id handed out to a login or logout (>= generation): a login whose id is no longer the
+    /// last one when READY arrives has been superseded and must not replace the live session.
+    last_gen: u64,
+}
+
+impl Inner {
+    fn next_gen(&mut self) -> u64 {
+        self.last_gen = self.last_gen.max(self.generation) + 1;
+        self.last_gen
+    }
 }
 
 #[derive(Clone)]
@@ -100,6 +116,11 @@ impl LiveClient {
     pub fn new(cfg: GatewayConfig, logger: Arc<Logger>) -> Self {
         let (events, _) = broadcast::channel(256);
         Self { inner: Arc::new(Mutex::new(Inner::default())), events, cfg, logger, trace: Arc::default() }
+    }
+
+    #[cfg(test)]
+    fn session_user_id(&self) -> Option<String> {
+        self.lock().session.as_ref().map(|s| s.user.id.clone())
     }
 
     pub fn set_trace(&self, on: bool) {
@@ -131,6 +152,9 @@ impl LiveClient {
                 // Stop only once replaced by a newer login or a logout. (Events right after READY arrive
                 // before login() has stored this generation: they must not end the session.)
                 if me.lock().generation > gen {
+                    if let Some(r) = ready.take() {
+                        let _ = r.send(Err(LoginError::Superseded));
+                    }
                     break;
                 }
                 match ev {
@@ -146,6 +170,16 @@ impl LiveClient {
                         match ready.take() {
                             Some(r) => {
                                 let _ = r.send(Err(err));
+                            }
+                            None if err == LoginError::InvalidToken => {
+                                {
+                                    let mut inner = me.lock();
+                                    if inner.generation == gen {
+                                        inner.session = None;
+                                        inner.commands.clear();
+                                    }
+                                }
+                                let _ = me.events.send(DiscordEvent::InvalidToken);
                             }
                             None => {
                                 let _ = me.events.send(DiscordEvent::Disconnected);
@@ -374,7 +408,7 @@ pub fn index_has_vf(index: &Value) -> bool {
 #[async_trait]
 impl DiscordClient for LiveClient {
     async fn login(&self, token: &str) -> std::result::Result<SelfUser, LoginError> {
-        let gen = { self.lock().generation + 1 };
+        let gen = self.lock().next_gen();
         let (tx, rx) = mpsc::unbounded_channel();
         let (gw_out, gw_out_rx) = mpsc::unbounded_channel();
         let (stop_tx, stop_rx) = watch::channel(false);
@@ -417,6 +451,10 @@ impl DiscordClient for LiveClient {
         };
         // swap only now: a failed login never drops the live session
         let mut inner = self.lock();
+        if inner.last_gen != gen {
+            let _ = session.stop.send(true);
+            return Err(LoginError::Superseded);
+        }
         if let Some(old) = inner.session.take() {
             let _ = old.stop.send(true);
         }
@@ -431,7 +469,7 @@ impl DiscordClient for LiveClient {
         if let Some(s) = inner.session.take() {
             let _ = s.stop.send(true);
         }
-        inner.generation += 1;
+        inner.generation = inner.next_gen();
         inner.active_channel = None;
         inner.commands.clear();
     }
@@ -702,6 +740,52 @@ mod tests {
         }}))).ok();
         let ev = timeout(Duration::from_secs(5), rx.recv()).await.expect("no event: the pump stopped").unwrap();
         assert!(matches!(ev, DiscordEvent::BotMessage(m) if m.id == "late"));
+    }
+
+    /// Opens a Gateway connection for a login in progress (hello + identify), READY not sent yet.
+    async fn pending_login(
+        client: &LiveClient,
+        conns: &mut mpsc::UnboundedReceiver<(mpsc::UnboundedReceiver<Value>, mpsc::UnboundedSender<Out>)>,
+        token: &'static str,
+    ) -> (tokio::task::JoinHandle<std::result::Result<SelfUser, LoginError>>, mpsc::UnboundedSender<Out>) {
+        let c2 = client.clone();
+        let login = tokio::spawn(async move { c2.login(token).await });
+        let (mut inbound, out) = next(conns).await;
+        out.send(Out::Json(json!({ "op": 10, "d": { "heartbeat_interval": 45000 } }))).ok();
+        next(&mut inbound).await;
+        (login, out)
+    }
+
+    fn ready_as(user_id: &str) -> Out {
+        let mut d = ready_payload();
+        d["user"]["id"] = json!(user_id);
+        Out::Json(json!({ "op": 0, "s": 1, "t": "READY", "d": d }))
+    }
+
+    #[tokio::test]
+    async fn an_older_login_finishing_last_never_replaces_the_newer_one() {
+        // startup auto-login (old token) still waiting for READY while the user pastes a new token
+        let (url, mut conns) = serve().await;
+        let tmp = tempfile::tempdir().unwrap();
+        let client = LiveClient::new(GatewayConfig { url, api_base: "http://127.0.0.1:1".into() }, Arc::new(Logger::new(tmp.keep())));
+        let (old, old_out) = pending_login(&client, &mut conns, "old").await;
+        let (new, new_out) = pending_login(&client, &mut conns, "new").await;
+        new_out.send(ready_as("222")).ok();
+        assert_eq!(new.await.unwrap().unwrap().id, "222");
+        old_out.send(ready_as("111")).ok();
+        assert_eq!(old.await.unwrap(), Err(LoginError::Superseded));
+        assert_eq!(client.session_user_id().as_deref(), Some("222"));
+    }
+
+    #[tokio::test]
+    async fn a_token_revoked_after_login_is_reported() {
+        let api = MockServer::start().await;
+        let (client, out) = logged_in(&api).await;
+        let mut rx = client.subscribe();
+        out.send(Out::Close(4004)).ok();
+        let ev = timeout(Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+        assert!(matches!(ev, DiscordEvent::InvalidToken), "{ev:?}");
+        assert_eq!(client.session_user_id(), None);
     }
 
     #[tokio::test]

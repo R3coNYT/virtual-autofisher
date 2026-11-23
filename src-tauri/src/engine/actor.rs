@@ -176,7 +176,7 @@ async fn run(mut a: Actor, mut cfg: watch::Receiver<Config>, mut rx: mpsc::Unbou
             },
             ev = events.recv(), if events_open => match ev {
                 Ok(DiscordEvent::BotMessage(m)) => EngineInput::Bot(m),
-                Ok(DiscordEvent::Disconnected) => EngineInput::Disconnected,
+                Ok(DiscordEvent::Disconnected | DiscordEvent::InvalidToken) => EngineInput::Disconnected, // AppCore stops it
                 Ok(DiscordEvent::Reconnected) => EngineInput::Reconnected,
                 Ok(DiscordEvent::RateLimited(ms)) => EngineInput::RateLimited(ms),
                 Err(RecvError::Lagged(_)) => continue,
