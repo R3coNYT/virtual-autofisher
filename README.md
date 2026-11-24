@@ -1,3 +1,5 @@
+<p align="center"><img src="src/renderer/assets/logo.png" alt="Virtual AutoFisher" width="200"></p>
+
 # Virtual AutoFisher
 
 A Windows desktop app (Tauri 2: Rust backend, React UI) that automates the **Virtual Fisher** Discord bot with your own account: continuous fishing, selling, fish and treasure buffs, personal boosters, bait, `/daily` and quest tracking, with a live dashboard (balance, fish value, level, catches, boosts, rare fish, log).
@@ -115,7 +117,7 @@ Data lives in `%APPDATA%\virtual-autofisher\`:
 | `npm run build` | Release build and NSIS installer in `src-tauri/target/release/bundle/nsis/` |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | Backend tests (engine, parser, Discord client, persistence) |
 | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | Backend lint |
-| `node scripts/make-icons.mjs` | Regenerates the icons (`src-tauri/icons/`) |
+| `powershell -ExecutionPolicy Bypass -File scripts/make-icons.ps1` | Regenerates every icon (app, tray, installer, UI) from `logo.png` |
 
 ## Troubleshooting
 

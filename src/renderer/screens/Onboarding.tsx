@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { AlertCircle, ArrowRight, ChevronDown, Eye, EyeOff, Fish, Loader2, Lock, ShieldAlert } from 'lucide-react'
+import { AlertCircle, ArrowRight, ChevronDown, Eye, EyeOff, Loader2, Lock, ShieldAlert } from 'lucide-react'
+import logo from '../assets/logo.png'
 import type { SelfUser } from '../../shared/types'
 import { Background } from '../components/Background'
 import { useStore } from '../store'
@@ -67,9 +68,7 @@ export default function Onboarding(): JSX.Element {
     <Background>
       <main className="mx-auto flex min-h-full max-w-xl flex-col justify-center gap-5 px-6 py-10">
         <header className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-turquoise text-ocean shadow-lg shadow-accent/20">
-            <Fish className="h-6 w-6" aria-hidden />
-          </span>
+          <img src={logo} alt="" className="h-14 w-14 shrink-0 rounded-xl shadow-lg shadow-accent/20" />
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-white">Virtual AutoFisher</h1>
             <p className="text-sm text-slate-400">Connect your Discord account to get started.</p>
