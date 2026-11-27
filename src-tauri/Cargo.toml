@@ -40,6 +40,15 @@ tokio = { version = "1", features = ["full", "test-util"] }
 tempfile = "3"
 wiremock = "0.6"
 
+# dev / test builds: no incremental cache (it grows without limit on every rebuild) and light debug
+# info (file:line in panics and backtraces), dependencies without debug info. Keeps target/debug small.
+[profile.dev]
+incremental = false
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 codegen-units = 1
 lto = true
